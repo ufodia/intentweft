@@ -1,6 +1,6 @@
 # Installation and compatibility
 
-The distribution source is `skills/intentweft/`. Install that entire folder, preserving its `references/`, `assets/`, `scripts/`, and `agents/` subdirectories. Copying only `SKILL.md` breaks its supporting links.
+The distribution source is `skills/intentweft/`. Install that folder, preserving its `references/`, `assets/`, `scripts/`, and `agents/` subdirectories. Copying only `SKILL.md` breaks its supporting links. Generated `__pycache__` directories and `*.pyc` / `*.pyo` files are unnecessary; the installer excludes them and preserves the remaining package files.
 
 ## Local installer
 
@@ -8,7 +8,9 @@ Run `python scripts/install.py --help` from the cloned repository. Python 3.10+ 
 
 Choose `--agent codex`, `--agent claude`, or `--agent both`. Choose `--scope project --project <path>` or `--scope user`. Use `--dry-run` to inspect destinations. Paths containing spaces must be quoted. The installer does not contact a remote service, alter existing skills, configure API credentials, or modify agent settings.
 
-Both-agent installation preflights all destinations before copying. An existing target causes a refusal. If copying fails during an installation, the installer attempts to remove only the new folders it created.
+Both-agent installation preflights all destinations before copying. An existing target causes a refusal. If copying fails or you interrupt it with Ctrl+C, the installer attempts to remove only the new skill folders and empty parent folders it created. Cleanup handles read-only copied files. If cleanup cannot complete, inspect the reported paths before retrying.
+
+Cleanup can run only when the process catches the error or interruption. Forced process termination and power loss cannot run cleanup; inspect the destination if such an event occurs. Python-generated `__pycache__` directories and `.pyc` / `.pyo` files are excluded from source validation and installation. All other source files are copied.
 
 Before copying, the installer validates this distribution's deliberately limited two-field `SKILL.md` frontmatter: the plain `name: intentweft` and a nonempty `description`. Descriptions may use plain English text or JSON-compatible double quoting. Missing, duplicate, unsupported, or malformed fields are rejected. This is a check of the bundled distribution, not a general YAML validator for arbitrary third-party skills.
 

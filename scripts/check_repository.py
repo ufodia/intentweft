@@ -47,6 +47,13 @@ def check(root: Path = ROOT) -> list[str]:
     root = root.resolve()
     skill = root / "skills" / "intentweft"
     errors: list[str] = []
+
+    def read_text(path: Path) -> str | None:
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            errors.append(f"Cannot read UTF-8 text in {path.relative_to(root)}: {exc}")
+            return None
     required = [
         "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
         "docs/INSTALLATION.md", "scripts/install.py", "evals/README.md",
@@ -60,13 +67,16 @@ def check(root: Path = ROOT) -> list[str]:
             errors.append(f"Missing required file: {relative}")
     skill_file = skill / "SKILL.md"
     if skill_file.is_file():
-        content = skill_file.read_text(encoding="utf-8")
+        content = read_text(skill_file)
+    else:
+        content = None
+    if content is not None:
         # Use the installer's exact subset rather than a divergent second parser.
         installer_path = root / "scripts" / "install.py"
         if installer_path.is_file():
             try:
                 load_module(installer_path, "intentweft_install_check").validate_metadata(content)
-            except (ValueError, OSError, SyntaxError) as exc:
+            except (ValueError, OSError, SyntaxError, RecursionError) as exc:
                 errors.append(f"Invalid skill metadata: {exc}")
         if len(content.splitlines()) > 500:
             errors.append("SKILL.md exceeds the 500-line context budget")
@@ -75,17 +85,21 @@ def check(root: Path = ROOT) -> list[str]:
     metadata = skill / "agents" / "openai.yaml"
     if metadata.is_file():
         try:
-            values = interface_values(metadata.read_text(encoding="utf-8"))
-            if not 25 <= len(values["short_description"]) <= 64:
-                errors.append("Interface short_description must contain 25 to 64 characters")
-            if "$intentweft" not in values["default_prompt"]:
-                errors.append("Interface default_prompt must invoke $intentweft")
+            metadata_text = read_text(metadata)
+            if metadata_text is not None:
+                values = interface_values(metadata_text)
+                if not 25 <= len(values["short_description"]) <= 64:
+                    errors.append("Interface short_description must contain 25 to 64 characters")
+                if not re.search(r"\$intentweft(?![A-Za-z0-9_-])", values["default_prompt"]):
+                    errors.append("Interface default_prompt must invoke $intentweft")
         except ValueError as exc:
             errors.append(f"Invalid interface metadata: {exc}")
     for document in root.rglob("*.md"):
         if any(part in {".git", "__pycache__", ".venv"} for part in document.parts):
             continue
-        text = document.read_text(encoding="utf-8")
+        text = read_text(document)
+        if text is None:
+            continue
         for link in re.findall(r'(?<!!)\[[^\]]+\]\(([^)\n]+)\)', text):
             destination = link.strip().split(' "', 1)[0].strip("<>")
             if destination.startswith("#") or urlsplit(destination).scheme:
@@ -98,7 +112,7 @@ def check(root: Path = ROOT) -> list[str]:
             continue
         try:
             compile(source.read_text(encoding="utf-8"), str(source), "exec")
-        except (SyntaxError, UnicodeError) as exc:
+        except (SyntaxError, UnicodeError, OSError) as exc:
             errors.append(f"Invalid Python source in {source.relative_to(root)}: {exc}")
     example = skill / "assets" / "report.example.json"
     if example.is_file():
@@ -107,7 +121,7 @@ def check(root: Path = ROOT) -> list[str]:
             try:
                 module = load_module(helper, "intentweft_evidence_check")
                 module.validate_report(module.load_report(example), root)
-            except (ValueError, OSError, SyntaxError) as exc:
+            except (ValueError, OSError, SyntaxError, RecursionError) as exc:
                 errors.append(f"Invalid example report: {exc}")
     return errors
 

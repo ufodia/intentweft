@@ -4,7 +4,10 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -52,6 +55,19 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(evidence.main(["check", str(report), "--root", str(self.root)]), 0)
         self.assertEqual(json.loads(snapshot.read_text())["sources"], self.report["sources"])
 
+    def test_cli_unicode_output_path_with_ascii_stdout(self):
+        output = self.root / "\u03a9-sources.json"
+        result = subprocess.run(
+            [sys.executable, "-B", str(SCRIPT), "snapshot", "--root", str(self.root),
+             "--out", str(output), "policy.md"],
+            env=dict(os.environ, PYTHONIOENCODING="ascii", PYTHONDONTWRITEBYTECODE="1"),
+            capture_output=True, text=True, encoding="ascii", timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(r"\u03a9-sources.json", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["sources"], self.report["sources"])
+
     def test_changed_file_invalidates_report(self):
         (self.root / "policy.md").write_text("Upload location.\n", encoding="utf-8")
         with self.assertRaisesRegex(evidence.EvidenceError, "fingerprint changed"):
@@ -61,6 +77,54 @@ class EvidenceTests(unittest.TestCase):
         for locator in ("../policy.md", "folder/../policy.md", str(self.root / "policy.md"), "C:\\secrets.txt", "\\\\server\\share\\secrets", "/etc/passwd", "policy.md:stream"):
             with self.subTest(locator=locator), self.assertRaises(evidence.EvidenceError):
                 evidence.capture(self.root, [locator])
+
+    def test_nonportable_file_components_rejected_before_lookup(self):
+        locators = (
+            "folder./policy.md", "folder /policy.md", "NUL", "aux.txt",
+            "folder/COM1.log", "LPT\u00b2", "NUL .txt", "CONIN$", "CONOUT$",
+            'invalid"name.md', "invalid<name.md", "invalid>name.md",
+            "invalid|name.md", "invalid?name.md", "invalid*name.md",
+            "invalid\x00name.md", "invalid\x1fname.md", "invalid\x7fname.md", "invalid\x85name.md",
+        )
+        for locator in locators:
+            with self.subTest(locator=locator), self.assertRaises(evidence.EvidenceError):
+                evidence.capture(self.root, [locator])
+
+    def test_backslash_locator_is_not_reinterpreted_as_a_separator(self):
+        folder = self.root / "folder"
+        folder.mkdir()
+        (folder / "policy.md").write_text("Nested file.\n", encoding="utf-8")
+        if os.name != "nt":
+            # POSIX permits both distinct names; silently replacing the slash
+            # would fingerprint the wrong explicitly named file.
+            literal = self.root / "folder\\policy.md"
+            literal.write_text("Literal backslash file.\n", encoding="utf-8")
+            self.assertNotEqual(literal.read_bytes(), (folder / "policy.md").read_bytes())
+        with self.assertRaisesRegex(evidence.EvidenceError, "POSIX '/' separators"):
+            evidence.capture(self.root, ["folder\\policy.md"])
+
+    def test_trailing_dot_and_space_file_aliases_rejected(self):
+        for suffix in (".", " "):
+            locator = "policy.md" + suffix
+            alias = self.root / locator
+            if os.name == "nt":
+                self.assertTrue(alias.samefile(self.root / "policy.md"))
+            else:
+                alias.write_text("Distinct POSIX file.\n", encoding="utf-8")
+                self.assertNotEqual(alias.read_bytes(), (self.root / "policy.md").read_bytes())
+            with self.subTest(locator=locator):
+                with self.assertRaisesRegex(evidence.EvidenceError, "unsafe path component"):
+                    evidence.capture(self.root, [locator])
+                self.report["sources"][0]["locator"] = locator
+                with self.assertRaisesRegex(evidence.EvidenceError, "unsafe path component"):
+                    evidence.validate_report(self.report, self.root)
+
+    def test_unicode_and_embedded_spaces_remain_valid_locators(self):
+        folder = self.root / "drafts & notes"
+        folder.mkdir()
+        (folder / "na\u00efve plan.md").write_text("Synthetic content.\n", encoding="utf-8")
+        result = evidence.capture(self.root, ["drafts & notes/na\u00efve plan.md"])
+        self.assertEqual(result["sources"][0]["locator"], "drafts & notes/na\u00efve plan.md")
 
     def test_symlink_escape_rejected(self):
         link = self.root / "link.md"
@@ -184,6 +248,30 @@ class EvidenceTests(unittest.TestCase):
         self.report["sources"][-1]["observed_at"] = "2026-11-13"
         evidence.validate_report(self.report, self.root)
 
+    def test_observation_dates_use_a_portable_extended_grammar(self):
+        source = {"id": "S2", "kind": "statement", "locator": "Synthetic observation"}
+        self.report["sources"].append(source)
+        for value in (
+            "2024-02-29", "2026-11-13", "2026-11-13T01:02:03Z",
+            "2026-11-13T01:02:03.1+05:30", "2026-11-13T01:02:03.123456-04:00",
+            "2026-11-13T01:02:03.12Z", "2026-11-13T01:02:03.123Z",
+            "2026-11-13T01:02:03.1234Z", "2026-11-13T01:02:03.12345Z",
+        ):
+            with self.subTest(value=value):
+                source["observed_at"] = value
+                evidence.validate_report(self.report, self.root)
+        for value in (
+            "20261113", "2026-W46-5", "2026W465", "2026-317",
+            "2026-11-13T01:02:03", "2026-11-13T01:02Z", "2026-11-13t01:02:03Z",
+            "2026-11-13T01:02:03.1234567Z", "2026-11-13T01:02:03,5Z",
+            "2026-11-13T01:02:03+0530", "2026-11-13T01:02:03+00:00:30",
+            "2026-11-13T01:02:03+00:60", "2026-11-13T01:02:03+24:00",
+            "2026-11-13T24:00:00Z", "2026-11-13T01:02:60Z", "2026-02-29",
+        ):
+            with self.subTest(value=value), self.assertRaisesRegex(evidence.EvidenceError, "observed_at"):
+                source["observed_at"] = value
+                evidence.validate_report(self.report, self.root)
+
     def test_duplicate_reference_rejected(self):
         self.report["requirements"][0]["source_ids"] = ["S1", "S1"]
         with self.assertRaisesRegex(evidence.EvidenceError, "duplicate reference"):
@@ -282,6 +370,37 @@ class EvidenceTests(unittest.TestCase):
     def test_reserved_device_output_rejected(self):
         with self.assertRaisesRegex(evidence.EvidenceError, "reserved Windows device"):
             evidence.write_snapshot(self.root / "NUL", {}, force=True)
+
+    def test_alternate_data_stream_output_rejected_without_orphan_files(self):
+        before = set(self.root.iterdir())
+        for locator in ("sources.json:stream", "reports:stream/sources.json"):
+            for force in (False, True):
+                with self.subTest(locator=locator, force=force):
+                    with self.assertRaisesRegex(evidence.EvidenceError, "alternate data stream"):
+                        evidence.write_snapshot(self.root / locator, {}, force=force)
+                    self.assertEqual(set(self.root.iterdir()), before)
+
+    def test_nonportable_output_components_rejected_without_mutation(self):
+        output = self.root / "sources.json"
+        output.write_text("Keep the original snapshot.\n", encoding="utf-8")
+        before = {path.name: path.read_bytes() for path in self.root.iterdir()}
+        for locator in (
+            "sources.json.", "sources.json ", "folder./sources.json", "folder /sources.json",
+            "NUL.json", "reports/COM1.log", "invalid|name.json", 'invalid"name.json',
+            "invalid<name.json", "invalid>name.json", "invalid?name.json", "invalid*name.json",
+            "invalid\x00name.json", "invalid\x1fname.json", "invalid\x7fname.json", "invalid\x85name.json",
+        ):
+            for force in (False, True):
+                with self.subTest(locator=locator, force=force), self.assertRaises(evidence.EvidenceError):
+                    evidence.write_snapshot(self.root / locator, {}, force=force)
+                self.assertEqual({path.name: path.read_bytes() for path in self.root.iterdir()}, before)
+
+    def test_output_parent_navigation_remains_supported(self):
+        folder = self.root / "reports"
+        folder.mkdir()
+        output = folder / ".." / "sources.json"
+        evidence.write_snapshot(output, {"sources": []}, force=False)
+        self.assertEqual(json.loads((self.root / "sources.json").read_text(encoding="utf-8")), {"sources": []})
 
     def test_reparse_detection_without_is_junction(self):
         target = self.root / "policy.md"

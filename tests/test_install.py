@@ -3,7 +3,11 @@
 import contextlib
 import importlib.util
 import io
+import os
 from pathlib import Path
+import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -101,6 +105,15 @@ class InstallTests(unittest.TestCase):
             "name: intentweft\ndescription: Review: evidence",
             "name: intentweft\ndescription: Review. # comment",
             "name: intentweft\ndescription: Review.\nmetadata: value",
+            "name: intentweft\ndescription: Review\x00evidence.",
+            "name: intentweft\ndescription: Review\x01evidence.",
+            "name: intentweft\ndescription: Review\x7fevidence.",
+            "name: intentweft\ndescription: Review\uffffevidence.",
+            r'name: intentweft' + '\n' + r'description: "Review\u0000evidence."',
+            r'name: intentweft' + '\n' + r'description: "Review\bevidence."',
+            r'name: intentweft' + '\n' + r'description: "Review\nevidence."',
+            r'name: intentweft' + '\n' + r'description: "Review\ud800evidence."',
+            r'name: intentweft' + '\n' + r'description: "Review\udfffevidence."',
             'name: intentweft\ndescription: "' + "A" * 1025 + '"',
         ]
         for frontmatter in invalid:
@@ -118,6 +131,68 @@ class InstallTests(unittest.TestCase):
         targets = installer.install(self.source, self.project, "both", dry_run=True)
         self.assertEqual(len(targets), 2)
         self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_json_quoted_unicode_description_is_supported(self):
+        (self.source / "SKILL.md").write_text(
+            '---\nname: intentweft\ndescription: "Review caf\\u00e9 evidence \\ud83d\\udcda."\n---\n',
+            encoding="utf-8",
+        )
+        self.assertEqual(len(installer.install(self.source, self.project, "both", dry_run=True)), 2)
+        self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_generated_files_are_excluded_from_validation_and_copy(self):
+        cache = self.source / "scripts" / "__pycache__"
+        cache.mkdir(parents=True)
+        (cache / "evidence.cpython-312.pyc").write_bytes(b"stale cache")
+        (self.source / "stale.pyc").write_bytes(b"bytecode")
+        (self.source / "stale.pyo").write_bytes(b"optimized bytecode")
+        real_is_link = installer.is_link
+
+        def reject_generated_validation(path):
+            if any(installer.is_generated_name(part) for part in path.relative_to(self.source).parts):
+                self.fail(f"Generated source entry was validated: {path}")
+            return real_is_link(path)
+
+        def source_link_check(path):
+            if path == self.source or path.is_relative_to(self.source):
+                return reject_generated_validation(path)
+            return real_is_link(path)
+
+        with patch.object(installer, "is_link", side_effect=source_link_check):
+            targets = installer.install(self.source, self.project, "both")
+        for target in targets:
+            self.assertEqual(
+                {str(path.relative_to(target)) for path in target.rglob("*") if path.is_file()},
+                {"SKILL.md", str(Path("references") / "protocol.md")},
+            )
+        self.assertTrue((cache / "evidence.cpython-312.pyc").exists())
+
+    def test_real_source_can_be_installed_after_importing_helper_without_bytecode(self):
+        helper_spec = importlib.util.spec_from_file_location(
+            "intentweft_install_test_helper", installer.SOURCE / "scripts" / "evidence.py"
+        )
+        helper = importlib.util.module_from_spec(helper_spec)
+        helper_spec.loader.exec_module(helper)
+        targets = installer.install(installer.SOURCE, self.project, "both")
+        for target in targets:
+            entries = list(target.rglob("*"))
+            self.assertFalse(any(installer.is_generated_name(path.name) for path in entries))
+            self.assertTrue((target / "scripts" / "evidence.py").is_file())
+            self.assertTrue((target / "references" / "review-protocol.md").is_file())
+
+    def test_cli_installs_unicode_project_path_with_ascii_output_encoding(self):
+        project = self.project / "Project with spaces \u03a9"
+        project.mkdir()
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--agent", "both", "--scope", "project", "--project", str(project)],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+            env={**os.environ, "PYTHONIOENCODING": "ascii"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn(r"\u03a9", result.stdout)
+        for agent_directory in installer.AGENT_DIRECTORIES.values():
+            self.assertTrue((project / agent_directory / "skills" / "intentweft" / "SKILL.md").is_file())
 
     def test_nonregular_skill_source_is_rejected(self):
         (self.source / "SKILL.md").unlink()
@@ -194,6 +269,99 @@ class InstallTests(unittest.TestCase):
                 installer.install(self.source, self.project, "both")
         self.assertEqual(list(preexisting.iterdir()), [marker])
         self.assertFalse((self.project / ".claude").exists())
+
+    def test_interruptions_roll_back_owned_paths_and_allow_retry(self):
+        real_copytree = installer.shutil.copytree
+        for exception_type in (KeyboardInterrupt, SystemExit):
+            for interrupted_agent in ("codex", "claude"):
+                with self.subTest(exception_type=exception_type, interrupted_agent=interrupted_agent):
+                    project = self.project / f"{exception_type.__name__}-{interrupted_agent}"
+                    project.mkdir()
+                    preexisting = project / ".agents"
+                    preexisting.mkdir()
+                    marker = preexisting / "keep.txt"
+                    marker.write_text("Keep this.", encoding="utf-8")
+                    target = project / installer.AGENT_DIRECTORIES[interrupted_agent] / "skills" / "intentweft"
+                    original = exception_type(73)
+
+                    def interrupt_copy(source, destination, *args, **kwargs):
+                        if Path(destination) == target:
+                            (Path(destination) / "partial.txt").write_text("partial", encoding="utf-8")
+                            raise original
+                        return real_copytree(source, destination, *args, **kwargs)
+
+                    with patch.object(installer.shutil, "copytree", side_effect=interrupt_copy):
+                        with self.assertRaises(exception_type) as caught:
+                            installer.install(self.source, project, "both")
+                    self.assertIs(caught.exception, original)
+                    self.assertEqual(list(preexisting.iterdir()), [marker])
+                    self.assertFalse((project / ".claude").exists())
+                    self.assertEqual(marker.read_text(encoding="utf-8"), "Keep this.")
+                    self.assertEqual(len(installer.install(self.source, project, "both")), 2)
+
+    def test_interrupt_preserves_original_exception_and_reports_rollback_failure(self):
+        original = KeyboardInterrupt("Cancelled")
+        stderr = io.StringIO()
+        with patch.object(installer.shutil, "copytree", side_effect=original), \
+                patch.object(installer, "remove_created_target", side_effect=PermissionError("Blocked cleanup")), \
+                contextlib.redirect_stderr(stderr):
+            with self.assertRaises(KeyboardInterrupt) as caught:
+                installer.install(self.source, self.project, "both")
+        self.assertIs(caught.exception, original)
+        self.assertIn("Rollback needs attention: Blocked cleanup", stderr.getvalue())
+
+    def test_readonly_rollback_handler_retries_only_an_owned_path(self):
+        target = self.project / ".agents" / "skills" / "intentweft"
+        target.mkdir(parents=True)
+        copied = target / "readonly.md"
+        copied.write_text("Copied content.", encoding="utf-8")
+        copied.chmod(stat.S_IREAD)
+        real_rmtree = installer.shutil.rmtree
+
+        def simulate_permission_error(directory, onerror):
+            error = PermissionError("Read-only copy")
+            onerror(os.unlink, str(copied), (PermissionError, error, None))
+            self.assertFalse(copied.exists())
+            real_rmtree(directory)
+
+        with patch.object(installer.shutil, "rmtree", side_effect=simulate_permission_error):
+            installer.remove_created_target(self.project, target)
+        self.assertFalse(target.exists())
+
+    def test_readonly_rollback_handler_refuses_paths_outside_the_owned_target(self):
+        target = self.project / ".agents" / "skills" / "intentweft"
+        target.mkdir(parents=True)
+        outside = self.root / "outside.md"
+        outside.write_text("Keep this.", encoding="utf-8")
+
+        def simulate_unsafe_permission_error(directory, onerror):
+            error = PermissionError("Permission failure")
+            onerror(os.unlink, str(outside), (PermissionError, error, None))
+
+        with patch.object(installer.shutil, "rmtree", side_effect=simulate_unsafe_permission_error):
+            with self.assertRaises(ValueError):
+                installer.remove_created_target(self.project, target)
+        self.assertEqual(outside.read_text(encoding="utf-8"), "Keep this.")
+
+    @unittest.skipUnless(os.name == "nt", "Windows enforces the copied read-only file attribute.")
+    def test_windows_readonly_copy_is_removed_during_rollback(self):
+        readonly = self.source / "readonly.md"
+        readonly.write_text("Read-only content.", encoding="utf-8")
+        readonly.chmod(stat.S_IREAD)
+        self.addCleanup(readonly.chmod, stat.S_IREAD | stat.S_IWRITE)
+        real_copytree = installer.shutil.copytree
+        failed_target = self.project / ".claude" / "skills" / "intentweft"
+
+        def fail_second(source, destination, *args, **kwargs):
+            if Path(destination) == failed_target:
+                raise OSError("Simulated second-copy failure")
+            return real_copytree(source, destination, *args, **kwargs)
+
+        with patch.object(installer.shutil, "copytree", side_effect=fail_second):
+            with self.assertRaises(installer.InstallError) as caught:
+                installer.install(self.source, self.project, "both")
+        self.assertNotIn("Rollback needs attention", str(caught.exception))
+        self.assertEqual(list(self.project.iterdir()), [])
 
 
 if __name__ == "__main__":

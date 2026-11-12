@@ -16,6 +16,7 @@ import re
 import stat
 import sys
 import tempfile
+import unicodedata
 
 
 class EvidenceError(ValueError):
@@ -52,7 +53,26 @@ def load_report(path: Path) -> object:
         return json.load(handle, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
 
 
+def _validate_component(part: str, where: str) -> None:
+    if (part in {"", ".", ".."} or part.endswith((".", " "))
+            or any(char in '<>:"|?*\\' or unicodedata.category(char) == "Cc" for char in part)):
+        raise EvidenceError(f"{where} contains an unsafe path component: {part!r}")
+    # Windows treats device names as reserved even with an extension. Do not
+    # delegate this portable rule to version-dependent pathlib behavior.
+    basename = part.split(".", 1)[0].rstrip(" ").upper()
+    if re.fullmatch(r"CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|(?:COM|LPT)[1-9\u00b9\u00b2\u00b3]", basename):
+        raise EvidenceError(f"{where} contains a reserved Windows device component: {part!r}")
+
+
 def _validate_output(output: Path) -> None:
+    # Keep the drive anchor, but reject NTFS alternate data stream syntax before
+    # opening either the destination or a sibling staging file.
+    for part in output.parts:
+        if part == output.anchor or part in {".", ".."}:
+            continue
+        if ":" in part:
+            raise EvidenceError("snapshot output must not contain alternate data stream syntax")
+        _validate_component(part, "snapshot output")
     # Check the original path before resolving away any link components.
     absolute = output.absolute()
     for candidate in (*reversed(absolute.parents), absolute):
@@ -133,13 +153,27 @@ def _choice(value: object, choices: set[str], where: str) -> str:
 
 def _date(value: object, where: str) -> None:
     text = _text(value, where)
+    date_only = re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text)
+    timestamp = re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+        r"(?:\.(?P<fraction>[0-9]{1,6}))?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])",
+        text,
+    )
+    error = f"{where}: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS[.ffffff] with Z or +/-HH:MM"
+    if not date_only and not timestamp:
+        raise EvidenceError(error)
     try:
-        if "T" in text:
+        if timestamp:
+            # Python 3.10 accepts fewer fractional formats than later parsers.
+            # Normalize our explicit 1-6 digit contract before calendar checking.
+            fraction = timestamp.group("fraction")
+            if fraction is not None:
+                text = text.replace("." + fraction, "." + fraction.ljust(6, "0"), 1)
             datetime.fromisoformat(text.replace("Z", "+00:00"))
         else:
             date.fromisoformat(text)
     except ValueError as exc:
-        raise EvidenceError(f"{where}: expected an ISO date or timestamp") from exc
+        raise EvidenceError(error) from exc
 
 
 def project_file(root: Path, locator: str) -> Path:
@@ -149,10 +183,11 @@ def project_file(root: Path, locator: str) -> Path:
     # Check both syntaxes even when running on POSIX; reports are portable.
     if Path(locator).is_absolute() or windows.is_absolute() or windows.drive or windows.root:
         raise EvidenceError(f"file locator must be relative: {locator}")
-    normalized = locator.replace("\\", "/")
-    parts = normalized.split("/")
-    if any(part in {"", ".", ".."} for part in parts) or ":" in normalized:
-        raise EvidenceError(f"file locator contains an unsafe path component: {locator}")
+    if "\\" in locator:
+        raise EvidenceError(f"file locator must use POSIX '/' separators, not backslashes: {locator}")
+    parts = locator.split("/")
+    for part in parts:
+        _validate_component(part, "file locator")
     base = root.resolve(strict=True)
     if not base.is_dir():
         raise EvidenceError(f"project root is not a directory: {root}")
@@ -330,4 +365,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     sys.exit(main())

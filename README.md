@@ -45,7 +45,7 @@ python scripts/install.py --agent both --scope user --dry-run
 python scripts/install.py --agent both --scope user
 ```
 
-The installer copies the same skill source to these supported locations:
+The installer copies the same skill source to these supported locations, excluding generated `__pycache__` directories and `*.pyc` / `*.pyo` files:
 
 | Agent | Project installation | User installation |
 | --- | --- | --- |
@@ -130,6 +130,8 @@ Copy the generated source entries into your report and retain its other required
 python skills/intentweft/scripts/evidence.py check report.json --root /path/to/project
 ```
 
+File locators such as `src/analytics.ts` are relative to `--root` and use `/` separators on every operating system. Quote locators containing spaces. The `check` command exits `0` for a valid, current report even when its verdict is `needs-action` or `insufficient-evidence`; inspect the reported verdict separately. Exit `1` indicates an invalid or stale report or an I/O failure, and `2` indicates invalid command arguments.
+
 The helper reads only named files and performs no network requests. It stores paths and hashes, not file contents. A changed file hash makes the report stale. It does not detect unlisted changes, authenticate evidence, evaluate legal compliance, run project tests, or prove semantic correctness. See the [report contract](skills/intentweft/references/report-format.md).
 
 ## Boundaries
@@ -147,7 +149,7 @@ python scripts/check_repository.py
 python -m unittest discover -s tests -v
 ```
 
-CI runs structural checks and helper tests on Windows and Linux. These checks validate packaging and code behavior; they do not measure model review quality. [Evaluation guidance](evals/README.md) explains how to run fresh agent sessions against the synthetic cases without leaking expected answers.
+CI runs structural checks, helper tests, and installed-package integration checks on Windows, Linux, and macOS with Python 3.10 and 3.12. These checks validate packaging and code behavior; they do not measure model review quality. [Evaluation guidance](evals/README.md) explains how to run fresh agent sessions against the synthetic cases without leaking expected answers.
 
 See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the [MIT license](LICENSE).
 

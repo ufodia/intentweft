@@ -21,11 +21,27 @@ class InstallError(ValueError):
     """An installation cannot safely proceed."""
 
 
+def is_generated_name(name: str) -> bool:
+    """Omit only Python-generated caches and bytecode from the distribution."""
+    return name == "__pycache__" or name.endswith((".pyc", ".pyo"))
+
+
+def ignore_generated_files(directory: str, names: list[str]) -> set[str]:
+    """Use the same generated-file boundary when copying and validating."""
+    return {name for name in names if is_generated_name(name)}
+
+
 def validate_metadata(text: str) -> None:
     """Validate this distribution's deliberately small, portable YAML subset."""
     frontmatter = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
     if frontmatter is None:
         raise InstallError("SKILL.md must start with YAML frontmatter.")
+    if any(not (character in "\t\n\r" or 0x20 <= ord(character) <= 0x7E
+                or ord(character) == 0x85 or 0xA0 <= ord(character) <= 0xD7FF
+                or 0xE000 <= ord(character) <= 0xFFFD
+                or 0x10000 <= ord(character) <= 0x10FFFF)
+           for character in frontmatter.group(1)):
+        raise InstallError("SKILL.md frontmatter contains a character that is invalid in YAML.")
     fields: dict[str, str] = {}
     for line in frontmatter.group(1).splitlines():
         if not line.strip():
@@ -59,6 +75,10 @@ def validate_metadata(text: str) -> None:
         description = raw_description
     if not isinstance(description, str) or not description.strip() or len(description) > 1024:
         raise InstallError("SKILL.md description must contain 1 to 1024 characters of text.")
+    if any(ord(character) < 0x20 or 0x7F <= ord(character) <= 0x9F
+           or 0xD800 <= ord(character) <= 0xDFFF or ord(character) in {0xFFFE, 0xFFFF}
+           for character in description):
+        raise InstallError("SKILL.md description cannot contain control characters or invalid Unicode.")
 
 
 def is_link(path: Path) -> bool:
@@ -77,11 +97,17 @@ def validate_source(source: Path) -> Path:
     if is_link(source) or not source.is_dir():
         raise InstallError("The skill source must be a real directory.")
     source = source.resolve(strict=True)
-    for entry in source.rglob("*"):
-        if is_link(entry):
-            raise InstallError(f"Symbolic links are not allowed in the source: {entry}")
-        if not (entry.is_dir() or stat.S_ISREG(entry.stat().st_mode)):
-            raise InstallError(f"Unsupported source entry: {entry}")
+    pending = [source]
+    while pending:
+        for entry in pending.pop().iterdir():
+            if is_generated_name(entry.name):
+                continue
+            if is_link(entry):
+                raise InstallError(f"Symbolic links are not allowed in the source: {entry}")
+            if entry.is_dir():
+                pending.append(entry)
+            elif not stat.S_ISREG(entry.stat().st_mode):
+                raise InstallError(f"Unsupported source entry: {entry}")
     skill_file = source / "SKILL.md"
     if not skill_file.is_file():
         raise InstallError("The source does not contain SKILL.md.")
@@ -132,7 +158,29 @@ def remove_created_target(base: Path, target: Path) -> None:
         raise InstallError(f"Cannot roll back a destination replaced by a link: {target}")
     target.resolve().relative_to(base)
     if target.exists():
-        shutil.rmtree(target)
+        def retry_readonly(function, path, error_info):
+            """Clear copied write protection only within this owned directory."""
+            if not isinstance(error_info[1], PermissionError):
+                raise error_info[1]
+            failed = Path(path)
+            relative = failed.relative_to(target)
+            target.resolve().relative_to(base)
+            current = target
+            owned_paths = [current]
+            for component in relative.parts:
+                current = current / component
+                owned_paths.append(current)
+            for owned in owned_paths:
+                if is_link(owned):
+                    raise InstallError(f"Cannot change permissions on a rollback link: {owned}")
+            for owned in owned_paths:
+                mode = owned.stat().st_mode | stat.S_IRUSR | stat.S_IWUSR
+                if owned.is_dir():
+                    mode |= stat.S_IXUSR
+                owned.chmod(mode)
+            function(path)
+
+        shutil.rmtree(target, onerror=retry_readonly)
 
 
 def install(source: Path, base: Path, agent: str, dry_run: bool = False) -> list[Path]:
@@ -161,8 +209,8 @@ def install(source: Path, base: Path, agent: str, dry_run: bool = False) -> list
             # Atomic mkdir claims an absent destination. Existing skills are never merged.
             target.mkdir()
             created_targets.append(target)
-            shutil.copytree(source, target, dirs_exist_ok=True)
-    except (OSError, InstallError) as exc:
+            shutil.copytree(source, target, dirs_exist_ok=True, ignore=ignore_generated_files)
+    except BaseException as exc:
         rollback_errors = []
         for target in reversed(created_targets):
             try:
@@ -175,6 +223,12 @@ def install(source: Path, base: Path, agent: str, dry_run: bool = False) -> list
             except OSError:
                 pass
         detail = f" Rollback needs attention: {'; '.join(rollback_errors)}" if rollback_errors else ""
+        if not isinstance(exc, (OSError, InstallError)):
+            # Preserve interrupts and unexpected exceptions after cleaning up every
+            # path this operation owns. Python 3.10 has no BaseException.add_note.
+            if detail:
+                print(detail.strip(), file=sys.stderr)
+            raise
         raise InstallError(f"Installation failed: {exc}.{detail}") from exc
     return targets
 
@@ -202,4 +256,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     raise SystemExit(main())

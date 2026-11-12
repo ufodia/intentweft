@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import unittest
@@ -58,6 +59,33 @@ class RepositoryTests(unittest.TestCase):
     def test_python_syntax_error_is_rejected(self):
         (self.root / "tests" / "broken.py").write_text("def broken(:\n", encoding="utf-8")
         self.assertTrue(any("Invalid Python source" in error and "broken.py" in error for error in checker.check(self.root)))
+
+    def test_invalid_utf8_document_is_reported(self):
+        (self.root / "docs" / "broken.md").write_bytes(b"\xff\xfe\x00")
+        errors = checker.check(self.root)
+        self.assertTrue(any("Cannot read UTF-8 text" in error and "broken.md" in error for error in errors))
+
+    def test_excessively_nested_example_is_reported(self):
+        path = self.root / "skills" / "intentweft" / "assets" / "report.example.json"
+        path.write_text("[" * 2000 + "]" * 2000, encoding="utf-8")
+        self.assertTrue(any("Invalid example report" in error for error in checker.check(self.root)))
+
+    def test_similarly_named_skill_does_not_satisfy_default_prompt(self):
+        path = self.root / "skills" / "intentweft" / "agents" / "openai.yaml"
+        path.write_text(path.read_text(encoding="utf-8").replace("$intentweft", "$intentweft-other"), encoding="utf-8")
+        self.assertIn("Interface default_prompt must invoke $intentweft", checker.check(self.root))
+
+    def test_documented_complete_report_examples_validate(self):
+        skill = self.root / "skills" / "intentweft"
+        helper = checker.load_module(skill / "scripts" / "evidence.py", "intentweft_documented_reports")
+        text = (skill / "references" / "report-format.md").read_text(encoding="utf-8")
+        examples = re.findall(r"```json\n(.*?)\n```", text, re.S)
+        self.assertTrue(examples, "Keep at least one complete finding report in the format documentation")
+        for index, example in enumerate(examples):
+            with self.subTest(example=index):
+                path = self.root / f"documented-report-{index}.json"
+                path.write_text(example, encoding="utf-8")
+                helper.validate_report(helper.load_report(path), self.root)
 
 
 if __name__ == "__main__":
