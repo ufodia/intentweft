@@ -4,11 +4,13 @@ Date: November 13, 2026. All materials were synthetic. No production system was 
 
 ## Deterministic checks
 
-The local Windows environment used Python 3.12. The combined helper and installer suite ran **33 tests: 28 passed and 5 were skipped** because this host lacks permission to create real symbolic links. Mocked link-boundary checks passed. The skipped cases remain enabled for environments that support symbolic links.
+The local Windows environment used Python 3.12. After the second review, the helper, installer, and packaging suite ran **59 tests: 54 passed and 5 were skipped** because this host lacks permission to create real symbolic links. Mocked link-boundary checks passed. The skipped cases remain enabled for environments that support symbolic links.
 
-The repository checker validates portable metadata, required resources, local Markdown links, and the example report. It is a deliberately limited standard-library check of this repository's simple YAML subset, not a general YAML parser or a vendor certification.
+The repository checker validates portable metadata, required resources, local Markdown links, Python syntax, and the example report through the same strict JSON reader used by the CLI. It is a deliberately limited standard-library check of this repository's simple YAML subset, not a general YAML parser or a vendor certification.
 
-The CI workflow is configured for Python 3.10 and 3.12 on Windows and Ubuntu. Configuration is not evidence that a remote run succeeded; inspect the repository's Actions results for the current revision.
+The CI workflow is configured for Python 3.10 and 3.12 on Windows and Ubuntu. All four configurations passed for the initial published version. Inspect the repository's Actions results for the current revision; a previous successful run is not evidence for later changes.
+
+The second review added regression checks for interrupted snapshot writes, replacement failure, partial-output cleanup, duplicate JSON keys, nonstandard JSON constants, Windows reparse paths, malformed skill metadata, required checks that did not run, explicit risk-acceptance evidence, uncertain findings, invalid interface mappings, broken resources, and Python syntax errors. It also removed unsupported scope and runtime claims from examples.
 
 ## Agent workflow exercises
 
@@ -24,6 +26,10 @@ The sessions inherited the current Codex agent configuration. No separate Claude
 | Missing deployment | Insufficient evidence | Kept production operation unknown. Requested deployment, schedule, execution, and datastore evidence without asserting either compliance or a confirmed production failure. |
 
 These observations satisfy the intended qualitative checks for this small set: source linkage, concrete scenarios, corrections, bounded conclusions, and restraint on clean or evidence-poor inputs. The table is a summary of the actual responses, not a statistical measurement. Agent-run reproductions did not validate a real database or deployment.
+
+## Second-review workflow exercise
+
+A further fresh agent session used the updated skill with only the isolated `verification-gap` fixture. It returned **insufficient evidence**, retained the sandbox replay check as required and not-run, and did not substitute the reported static-review pass. It identified the draft readiness claim as exceeding the evidence and requested a sandbox result tied to the handler revision. It did not invent either a successful runtime check or a demonstrated webhook failure. This is one qualitative exercise of the revised instructions, not a cross-model measurement.
 
 ## Remaining coverage
 

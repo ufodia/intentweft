@@ -80,6 +80,52 @@ class InstallTests(unittest.TestCase):
             installer.install(self.source, self.project, "codex")
         self.assertEqual(list(self.project.iterdir()), [])
 
+    def test_invalid_metadata_is_rejected_before_any_installation(self):
+        invalid = [
+            "name: intentweft",
+            "name: intentweft\ndescription:",
+            'name: intentweft\ndescription: "   "',
+            "name: intentweft\ndescription: Review.\ndescription: Again.",
+            "name: intentweft\nname: intentweft\ndescription: Review.",
+            "name:\nintentweft\ndescription: Review.",
+            'name: "intentweft\ndescription: Review.',
+            'name: intentweft\ndescription: "Unfinished',
+            "name: intentweft\ndescription: 'Unfinished",
+            "name: intentweft\ndescription: true",
+            "name: intentweft\ndescription: 42",
+            "name: intentweft\ndescription: 2026-11-13",
+            "name: intentweft\ndescription: 0x10",
+            "name: intentweft\ndescription: .nan",
+            "name: intentweft\ndescription: [Review]",
+            "name: intentweft\ndescription: *missing_anchor",
+            "name: intentweft\ndescription: Review: evidence",
+            "name: intentweft\ndescription: Review. # comment",
+            "name: intentweft\ndescription: Review.\nmetadata: value",
+            'name: intentweft\ndescription: "' + "A" * 1025 + '"',
+        ]
+        for frontmatter in invalid:
+            with self.subTest(frontmatter=frontmatter):
+                (self.source / "SKILL.md").write_text("---\n" + frontmatter + "\n---\n", encoding="utf-8")
+                with self.assertRaises(installer.InstallError):
+                    installer.install(self.source, self.project, "both")
+                self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_json_quoted_description_is_supported(self):
+        (self.source / "SKILL.md").write_text(
+            '---\nname: intentweft\ndescription: "Review evidence: compare \\"before\\" and after."\n---\n',
+            encoding="utf-8",
+        )
+        targets = installer.install(self.source, self.project, "both", dry_run=True)
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_nonregular_skill_source_is_rejected(self):
+        (self.source / "SKILL.md").unlink()
+        (self.source / "SKILL.md").mkdir()
+        with self.assertRaisesRegex(installer.InstallError, "does not contain SKILL.md"):
+            installer.install(self.source, self.project, "both")
+        self.assertEqual(list(self.project.iterdir()), [])
+
     def test_nested_source_symlink_is_rejected(self):
         outside = self.root / "outside.txt"
         outside.write_text("Private data.", encoding="utf-8")

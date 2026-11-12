@@ -10,6 +10,8 @@ Choose `--agent codex`, `--agent claude`, or `--agent both`. Choose `--scope pro
 
 Both-agent installation preflights all destinations before copying. An existing target causes a refusal. If copying fails during an installation, the installer attempts to remove only the new folders it created.
 
+Before copying, the installer validates this distribution's deliberately limited two-field `SKILL.md` frontmatter: the plain `name: intentweft` and a nonempty `description`. Descriptions may use plain English text or JSON-compatible double quoting. Missing, duplicate, unsupported, or malformed fields are rejected. This is a check of the bundled distribution, not a general YAML validator for arbitrary third-party skills.
+
 ## Manual installation
 
 | Agent | Copy the complete source folder to |

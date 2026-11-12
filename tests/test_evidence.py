@@ -6,8 +6,10 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "intentweft" / "scripts" / "evidence.py"
 SPEC = importlib.util.spec_from_file_location("intentweft_evidence", SCRIPT)
@@ -18,7 +20,8 @@ SPEC.loader.exec_module(evidence)
 class EvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        # Match resolved helper paths when Windows exposes a short temporary-path alias.
+        self.root = Path(self.temp.name).resolve()
         (self.root / "policy.md").write_text("Do not upload location.\n", encoding="utf-8")
         self.report = {
             "schema_version": 1,
@@ -112,8 +115,62 @@ class EvidenceTests(unittest.TestCase):
     def test_accepted_risk_reported(self):
         finding = self.finding()
         finding["status"] = "accepted"
+        self.report["sources"].append({"id": "S2", "kind": "statement", "locator": "Authorized owner accepted F1 for this release", "observed_at": "2026-11-13"})
+        finding["acceptance_source_ids"] = ["S2"]
         self.report["findings"] = [finding]
         self.assertEqual(evidence.validate_report(self.report, self.root)["accepted_risks"], 1)
+
+    def test_accepted_risk_requires_decision_source(self):
+        finding = self.finding()
+        finding["status"] = "accepted"
+        self.report["findings"] = [finding]
+        for references in (None, [], ["S99"]):
+            with self.subTest(references=references):
+                if references is None:
+                    finding.pop("acceptance_source_ids", None)
+                else:
+                    finding["acceptance_source_ids"] = references
+                with self.assertRaisesRegex(evidence.EvidenceError, "acceptance_source_ids"):
+                    evidence.validate_report(self.report, self.root)
+
+    def test_execution_source_cannot_accept_risk(self):
+        finding = self.finding()
+        finding.update(status="accepted", acceptance_source_ids=["S2"])
+        self.report["sources"].append({"id": "S2", "kind": "execution", "locator": "test command passed", "observed_at": "2026-11-13"})
+        self.report["findings"] = [finding]
+        with self.assertRaisesRegex(evidence.EvidenceError, "cannot authorize acceptance"):
+            evidence.validate_report(self.report, self.root)
+
+    def test_unknown_open_finding_prevents_ready(self):
+        finding = self.finding()
+        finding["confidence"] = "unknown"
+        self.report["findings"] = [finding]
+        with self.assertRaisesRegex(evidence.EvidenceError, "insufficient-evidence"):
+            evidence.validate_report(self.report, self.root)
+        self.report["review"]["verdict"] = "insufficient-evidence"
+        self.assertEqual(evidence.validate_report(self.report, self.root)["verdict"], "insufficient-evidence")
+        self.report["requirements"][0]["status"] = "unmet"
+        self.report["review"]["verdict"] = "needs-action"
+        self.assertEqual(evidence.validate_report(self.report, self.root)["verdict"], "needs-action")
+
+    def test_required_unrun_check_prevents_ready(self):
+        self.report["checks"].append({"id": "C2", "description": "Run integration check", "status": "not-run", "source_ids": [], "detail": "Environment unavailable"})
+        with self.assertRaisesRegex(evidence.EvidenceError, "insufficient-evidence"):
+            evidence.validate_report(self.report, self.root)
+        self.report["checks"][-1]["required"] = False
+        self.assertEqual(evidence.validate_report(self.report, self.root)["verdict"], "ready")
+
+    def test_check_required_flag_must_be_boolean(self):
+        for value in (None, "false", 0, 1, []):
+            with self.subTest(value=value):
+                self.report["checks"][0]["required"] = value
+                with self.assertRaisesRegex(evidence.EvidenceError, "required: expected a boolean"):
+                    evidence.validate_report(self.report, self.root)
+
+    def test_optional_failed_check_still_requires_action(self):
+        self.report["checks"][0].update(required=False, status="failed")
+        self.report["review"]["verdict"] = "needs-action"
+        self.assertEqual(evidence.validate_report(self.report, self.root)["verdict"], "needs-action")
 
     def test_failed_check_prevents_ready(self):
         self.report["checks"][0]["status"] = "failed"
@@ -157,6 +214,97 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(evidence.main(["check", str(report), "--root", str(self.root)]), 1)
         self.assertIn("Error:", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_duplicate_json_keys_rejected_at_every_depth(self):
+        document = json.dumps(self.report)
+        cases = [
+            document.replace('"schema_version": 1', '"schema_version": 999, "schema_version": 1', 1),
+            document.replace('"status": "met"', '"status": "unmet", "status": "met"', 1),
+        ]
+        report = self.root / "duplicate.json"
+        for raw in cases:
+            with self.subTest(raw=raw):
+                report.write_text(raw, encoding="utf-8")
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(evidence.main(["check", str(report), "--root", str(self.root)]), 1)
+                self.assertIn("duplicate JSON object key", stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_nonstandard_json_constants_rejected(self):
+        report = self.root / "constants.json"
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                document = json.dumps(self.report)[:-1] + ', "extra": ' + constant + '}'
+                report.write_text(document, encoding="utf-8")
+                with self.assertRaisesRegex(evidence.EvidenceError, "nonstandard JSON constant"):
+                    evidence.load_report(report)
+
+    def test_failed_force_write_preserves_existing_snapshot(self):
+        output = self.root / "sources.json"
+        output.write_text("previous valid snapshot", encoding="utf-8")
+        args = ["snapshot", "--root", str(self.root), "--out", str(output), "--force", "policy.md"]
+        with patch.object(evidence.os, "fsync", side_effect=OSError("Simulated storage failure")), redirect_stderr(io.StringIO()):
+            self.assertEqual(evidence.main(args), 1)
+        self.assertEqual(output.read_text(encoding="utf-8"), "previous valid snapshot")
+        self.assertEqual(list(self.root.glob(".sources.json.*.tmp")), [])
+
+    def test_failed_new_snapshot_write_removes_partial_file(self):
+        output = self.root / "sources.json"
+        args = ["snapshot", "--root", str(self.root), "--out", str(output), "policy.md"]
+        with patch.object(evidence.os, "fsync", side_effect=OSError("Simulated storage failure")), redirect_stderr(io.StringIO()):
+            self.assertEqual(evidence.main(args), 1)
+        self.assertFalse(output.exists())
+
+    def test_failed_atomic_replace_preserves_existing_snapshot(self):
+        output = self.root / "sources.json"
+        output.write_text("previous valid snapshot", encoding="utf-8")
+        args = ["snapshot", "--root", str(self.root), "--out", str(output), "--force", "policy.md"]
+        with patch.object(evidence.os, "replace", side_effect=OSError("Simulated replacement failure")), redirect_stderr(io.StringIO()):
+            self.assertEqual(evidence.main(args), 1)
+        self.assertEqual(output.read_text(encoding="utf-8"), "previous valid snapshot")
+        self.assertEqual(list(self.root.glob(".sources.json.*.tmp")), [])
+
+    def test_output_directory_and_special_file_rejected(self):
+        with self.assertRaisesRegex(evidence.EvidenceError, "regular file"):
+            evidence.write_snapshot(self.root, {}, force=True)
+        output = self.root / "sources.json"
+        output.write_text("keep", encoding="utf-8")
+        # Simulate a FIFO/device mode without creating a host special file.
+        real_stat = Path.stat
+        def special_mode(path, *args, **kwargs):
+            result = real_stat(path, *args, **kwargs)
+            return SimpleNamespace(st_mode=evidence.stat.S_IFIFO) if path == output else result
+        with patch.object(Path, "stat", special_mode), self.assertRaisesRegex(evidence.EvidenceError, "regular file"):
+            evidence.write_snapshot(output, {}, force=True)
+        self.assertEqual(output.read_text(encoding="utf-8"), "keep")
+
+    def test_reserved_device_output_rejected(self):
+        with self.assertRaisesRegex(evidence.EvidenceError, "reserved Windows device"):
+            evidence.write_snapshot(self.root / "NUL", {}, force=True)
+
+    def test_reparse_detection_without_is_junction(self):
+        target = self.root / "policy.md"
+        real_lstat = Path.lstat
+        def reparse_stat(path, *args, **kwargs):
+            result = real_lstat(path, *args, **kwargs)
+            return SimpleNamespace(st_file_attributes=0x400) if path == target else result
+        with patch.object(Path, "is_symlink", return_value=False), \
+                patch.object(Path, "is_junction", return_value=False, create=True), \
+                patch.object(Path, "lstat", reparse_stat), \
+                patch.object(evidence.stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400, create=True):
+            self.assertTrue(evidence.is_link(target))
+            with self.assertRaisesRegex(evidence.EvidenceError, "symlink or junction"):
+                evidence.capture(self.root, ["policy.md"])
+
+    def test_output_reparse_ancestor_rejected(self):
+        ancestor = self.root / "reports"
+        ancestor.mkdir()
+        real_is_link = evidence.is_link
+        with patch.object(evidence, "is_link", side_effect=lambda path: path == ancestor or real_is_link(path)):
+            with self.assertRaisesRegex(evidence.EvidenceError, "paths must not contain"):
+                evidence.write_snapshot(ancestor / "sources.json", {}, force=True)
+        self.assertEqual(list(ancestor.iterdir()), [])
 
     @staticmethod
     def finding():

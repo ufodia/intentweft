@@ -104,10 +104,10 @@ The useful combination is intent preservation, evidence provenance, contradictio
 Verdict: Needs action
 Scope: Location analytics change; static inspection only
 
-F1 — Precise coordinates leave the device
+F1 — Analytics payload includes precise coordinates
 Requirement: R1, product-brief.md, "Data promise"
 Evidence: analytics.ts, trackMapOpen(), outgoing latitude/longitude fields
-Trigger: A user grants location permission and opens the map
+Trigger: trackMapOpen() is called with a device position
 Impact: The analytics path contradicts the documented storage promise
 Action: Remove precise coordinates from the event and review downstream fields
 Verification: Inspect a captured outgoing event after the fix

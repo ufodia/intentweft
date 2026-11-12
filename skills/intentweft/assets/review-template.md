@@ -22,12 +22,13 @@
 - Impact: <consequence>
 - Action: <smallest coherent correction>
 - Verification: <relevant check, actual result or not-run, and remaining limit>
+- Acceptance decision: <required only for accepted risks: authorized decision and source anchor>
 
 ## Checks and unknowns
 
-| Check | Status | Evidence and limit |
-| --- | --- | --- |
-| <check> | passed / failed / not-run | <actual result and coverage> |
+| Check | Required? | Status | Evidence and limit |
+| --- | --- | --- | --- |
+| <check> | yes / no, with reason | passed / failed / not-run | <actual result and coverage> |
 
 List material unknowns with the smallest resolving step. Disclose any accepted risk and the decision accepting it. State when no findings were established.
 

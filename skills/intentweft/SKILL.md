@@ -55,7 +55,7 @@ Check disconfirming evidence before escalating a suspicion. Look for callers, mi
 
 If implementation is authorized, make the smallest coherent change that satisfies the requirement. Preserve unrelated user work. Run checks appropriate to the change when permitted; prefer an existing relevant check or a focused reproduction. Never claim an execution that did not occur.
 
-For each check record `passed`, `failed`, or `not-run`, the evidence, and the practical limit. Separate static inspection from runtime behavior. A command exiting successfully supports only what the command actually checked. Reopen a finding when the evidence for its resolution becomes stale.
+For each check record `passed`, `failed`, or `not-run`, whether it is required to support the conclusion, the evidence, and the practical limit. Treat checks as required by default. If a required check cannot run, mark the affected requirement `unknown`; another passing check cannot substitute for missing evidence. Use an optional check only when its omission does not affect the scoped conclusion, and explain that limit. Separate static inspection from runtime behavior. A command exiting successfully supports only what the command actually checked. Reopen a finding when the evidence for its resolution becomes stale.
 
 Use the bundled helper when a durable report needs file freshness and structural checks:
 
@@ -64,17 +64,17 @@ python <skill-dir>/scripts/evidence.py snapshot --root <project> --out <sources.
 python <skill-dir>/scripts/evidence.py check <report.json> --root <project>
 ```
 
-Inspect the script before running it if required by the host. Supply explicitly selected files; never scan secrets or private directories. The helper hashes files and validates report consistency. It does not establish that claims are true, tests are sufficient, or the system is secure. See [report-format.md](references/report-format.md) and [report.example.json](assets/report.example.json).
+Inspect the script before running it if required by the host. Supply explicitly selected files within the authorized project scope; do not scan unrelated private directories or credential files. The helper hashes files and validates report consistency. It does not establish that claims are true, tests are sufficient, or the system is secure. See [report-format.md](references/report-format.md) and [report.example.json](assets/report.example.json).
 
 ## 6. Deliver a decision the user can use
 
 Lead with one bounded verdict:
 
-- **Ready within scope:** all reviewed requirements are supported, relevant verification ran, and no unresolved high/critical finding or blocking unknown remains. Disclose accepted risks and untested boundaries.
-- **Needs action:** evidence shows an unmet requirement, a failed relevant check, or an open high/critical finding.
-- **Insufficient evidence:** unresolved uncertainty prevents a conclusion and there is no established blocker that already makes action necessary.
+- **Ready within scope:** all reviewed requirements are supported, required verification ran, and no open high/critical finding, open finding with unknown confidence, or blocking unknown remains. Disclose accepted risks and untested boundaries.
+- **Needs action:** evidence shows an unmet requirement, a failed relevant check, or an open high/critical finding supported by confirmed or inferred evidence.
+- **Insufficient evidence:** a required check has not run, an open finding has unknown confidence, or unresolved uncertainty prevents a conclusion, and there is no supported blocker that already makes action necessary.
 
-Follow with the highest-impact findings, exact evidence, fixes, checks performed, material unknowns, and next actions. When both a known failure and an unknown exist, choose `needs-action` and retain the unknown. Avoid a numerical safety score or certification language.
+Follow with the highest-impact findings, exact evidence, fixes, checks performed, material unknowns, and next actions. When both a supported blocker and an unknown exist, choose `needs-action` and retain the unknown. Cite the explicit authorized acceptance decision for each accepted risk; an agent cannot accept a risk on the user's behalf. In JSON use `acceptance_source_ids` for those decision references. Avoid a numerical safety score or certification language.
 
 For a durable record, use [review-template.md](assets/review-template.md), optionally paired with the JSON format. Make artifact creation proportional to the task. Do not copy private source contents into a public issue or repository.
 

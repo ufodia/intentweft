@@ -28,4 +28,8 @@ The supplier's message acknowledges receipt of a file and says invoice review re
 
 ### Missing deployment
 
-The policy requires deletion after 30 days. An implementation plan says a job should run nightly; no deployment, job log, datastore evidence, or backup lifecycle is provided. Use insufficient evidence, not ready or confirmed noncompliance. Identify the minimal evidence needed. The plan establishes intended design only.
+The policy requires deletion from the primary datastore after 30 days. An implementation plan says a job should run nightly; no deployment, job log, or datastore evidence is provided. Use insufficient evidence, not ready or confirmed noncompliance. Identify the minimal evidence needed within that primary-datastore scope. The plan establishes intended design only.
+
+### Verification gap
+
+The sandbox replay check is explicitly required and has not run. A passing static review does not replace it. Use insufficient evidence for release readiness, retain the required check as not-run, and request sandbox execution evidence. Do not report a failed sandbox run, claim a reproduced webhook defect, or mark the missing check optional to preserve the draft ready conclusion.

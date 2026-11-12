@@ -32,7 +32,13 @@ Do not infer likelihood from severity. State prerequisites and exposure in words
 
 ## Status and acceptance
 
-Use `open` until the issue is addressed. Use `resolved` only with fresh evidence relevant to the fix. Use `accepted` only for a risk explicitly accepted by an authorized user, linking that decision. Agent preference is not risk acceptance. Report accepted risks visibly; their acceptance does not make the underlying behavior correct. An unmet requirement still prevents a ready verdict until the requirement is explicitly revised or met.
+Use `open` until the issue is addressed. Use `resolved` only with fresh evidence relevant to the fix. Use `accepted` only for a risk explicitly accepted by an authorized user, linking that decision with `acceptance_source_ids` in JSON. Reference the statement or decision document that records acceptance; a successful command is not a user's risk acceptance. Agent preference is not risk acceptance. Report accepted risks visibly; their acceptance does not make the underlying behavior correct. An unmet requirement still prevents a ready verdict until the requirement is explicitly revised or met.
+
+Keep an open finding with `unknown` confidence in the insufficient-evidence category unless another supported blocker already requires action. Its severity describes the possible consequence, not an established failure.
+
+## Required and optional checks
+
+Treat checks as required unless their omission cannot change the scoped conclusion. A required `not-run` check blocks readiness even when other checks passed. An optional `not-run` check must state why it is outside the evidence needed for this conclusion. Any relevant failed check still requires action, including one originally described as optional. Do not relabel a necessary production check as optional merely to obtain a ready verdict.
 
 ## Scope by mode
 

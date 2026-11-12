@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import re
 import shutil
@@ -18,6 +19,46 @@ AGENT_DIRECTORIES = {"codex": ".agents", "claude": ".claude"}
 
 class InstallError(ValueError):
     """An installation cannot safely proceed."""
+
+
+def validate_metadata(text: str) -> None:
+    """Validate this distribution's deliberately small, portable YAML subset."""
+    frontmatter = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
+    if frontmatter is None:
+        raise InstallError("SKILL.md must start with YAML frontmatter.")
+    fields: dict[str, str] = {}
+    for line in frontmatter.group(1).splitlines():
+        if not line.strip():
+            continue
+        field = re.fullmatch(r"([a-z][a-z_]*):[ \t]*(.*)", line)
+        if field is None:
+            raise InstallError("Unsupported SKILL.md frontmatter; use one name and description field on separate lines.")
+        key, value = field.groups()
+        if key not in {"name", "description"}:
+            raise InstallError(f"Unsupported SKILL.md frontmatter field: {key}.")
+        if key in fields:
+            raise InstallError(f"Duplicate SKILL.md frontmatter field: {key}.")
+        fields[key] = value.strip()
+    if fields.get("name") != SKILL_NAME:
+        raise InstallError("SKILL.md must declare exactly one plain name: intentweft.")
+    raw_description = fields.get("description", "")
+    if raw_description.startswith('"'):
+        try:
+            description = json.loads(raw_description)
+        except ValueError as exc:
+            raise InstallError("SKILL.md description must use valid JSON-compatible double quoting.") from exc
+    else:
+        # Supporting a narrow plain-string form keeps installation dependency-free.
+        # Reject YAML structures, typed scalars, tags, anchors, and inline comments.
+        if (not re.match(r"[A-Za-z]", raw_description)
+                or re.search(r":(?:[ \t]|$)|(?:^|[ \t])#", raw_description)
+                or re.match(r"[-?:][ \t]", raw_description)
+                or raw_description.lower() in {"null", "~", "true", "false", "yes", "no", "on", "off"}
+                or re.fullmatch(r"[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)(?:[eE][+-]?[0-9]+)?", raw_description)):
+            raise InstallError("Unsupported SKILL.md description; use plain English text or JSON-compatible double quoting.")
+        description = raw_description
+    if not isinstance(description, str) or not description.strip() or len(description) > 1024:
+        raise InstallError("SKILL.md description must contain 1 to 1024 characters of text.")
 
 
 def is_link(path: Path) -> bool:
@@ -45,12 +86,7 @@ def validate_source(source: Path) -> Path:
     if not skill_file.is_file():
         raise InstallError("The source does not contain SKILL.md.")
     text = skill_file.read_text(encoding="utf-8")
-    frontmatter = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
-    if frontmatter is None:
-        raise InstallError("SKILL.md must start with YAML frontmatter.")
-    names = re.findall(r"^name:\s*([^\r\n]+)\s*$", frontmatter.group(1), re.M)
-    if len(names) != 1 or names[0].strip().strip("\"'") != SKILL_NAME:
-        raise InstallError("SKILL.md must declare exactly one name: intentweft.")
+    validate_metadata(text)
     return source
 
 

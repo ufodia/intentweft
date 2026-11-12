@@ -18,6 +18,7 @@ These small synthetic cases exercise the workflow. They are not a benchmark esta
 | `fixtures/schedule-control` | Current explicit decisions and a clean implementation |
 | `fixtures/document-claims` | Claims supported by supplied correspondence |
 | `fixtures/missing-deployment` | An implementation claim without remote evidence |
+| `fixtures/verification-gap` | A passing static check alongside a required check that has not run |
 
 The rubric includes false-positive controls, uncertainty handling, and verification honesty. A missing tool should reduce coverage explicitly rather than produce a fabricated successful check.
 

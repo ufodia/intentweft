@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -11,10 +12,40 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills" / "intentweft"
 
 
-def check() -> list[str]:
+def load_module(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Cannot load repository helper: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def interface_values(text: str) -> dict[str, str]:
+    """Read only the interface mapping used by this distribution."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines or lines[0] != "interface:":
+        raise ValueError("Expected one interface mapping")
+    values: dict[str, str] = {}
+    allowed = {"display_name", "short_description", "default_prompt"}
+    for line in lines[1:]:
+        match = re.fullmatch(r"  ([a-z_]+): (.+)", line)
+        if match is None or match[1] not in allowed or match[1] in values:
+            raise ValueError("Unsupported or duplicate interface field")
+        value = json.loads(match[2])
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Expected a nonempty quoted interface string: {match[1]}")
+        values[match[1]] = value
+    if values.keys() != allowed:
+        raise ValueError("Interface must declare display_name, short_description, and default_prompt")
+    return values
+
+
+def check(root: Path = ROOT) -> list[str]:
+    root = root.resolve()
+    skill = root / "skills" / "intentweft"
     errors: list[str] = []
     required = [
         "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
@@ -25,38 +56,33 @@ def check() -> list[str]:
         "skills/intentweft/assets/report.example.json",
     ]
     for relative in required:
-        if not (ROOT / relative).is_file():
+        if not (root / relative).is_file():
             errors.append(f"Missing required file: {relative}")
-    skill_file = SKILL / "SKILL.md"
+    skill_file = skill / "SKILL.md"
     if skill_file.is_file():
         content = skill_file.read_text(encoding="utf-8")
-        # This distribution intentionally uses a simple portable YAML subset.
-        front = re.match(r'\A---\nname: intentweft\ndescription: ("[^\n]+")\n---\n', content)
-        if front is None:
-            errors.append("SKILL.md frontmatter must contain name and quoted description only")
-        else:
+        # Use the installer's exact subset rather than a divergent second parser.
+        installer_path = root / "scripts" / "install.py"
+        if installer_path.is_file():
             try:
-                description = json.loads(front[1])
-                if not isinstance(description, str) or not 1 <= len(description) <= 1024:
-                    errors.append("Skill description must contain 1 to 1024 characters")
-            except ValueError:
-                errors.append("Skill description must use valid JSON-compatible YAML quoting")
+                load_module(installer_path, "intentweft_install_check").validate_metadata(content)
+            except (ValueError, OSError, SyntaxError) as exc:
+                errors.append(f"Invalid skill metadata: {exc}")
         if len(content.splitlines()) > 500:
             errors.append("SKILL.md exceeds the 500-line context budget")
         if "[TODO" in content:
             errors.append("SKILL.md still contains a template placeholder")
-    metadata = SKILL / "agents" / "openai.yaml"
+    metadata = skill / "agents" / "openai.yaml"
     if metadata.is_file():
-        text = metadata.read_text(encoding="utf-8")
-        for field in ("display_name", "short_description", "default_prompt"):
-            match = re.search(rf'^  {field}: "(.+)"$', text, re.M)
-            if not match:
-                errors.append(f"Missing or unquoted interface field: {field}")
-            elif field == "short_description" and not 25 <= len(match[1]) <= 64:
+        try:
+            values = interface_values(metadata.read_text(encoding="utf-8"))
+            if not 25 <= len(values["short_description"]) <= 64:
                 errors.append("Interface short_description must contain 25 to 64 characters")
-            elif field == "default_prompt" and "$intentweft" not in match[1]:
+            if "$intentweft" not in values["default_prompt"]:
                 errors.append("Interface default_prompt must invoke $intentweft")
-    for document in ROOT.rglob("*.md"):
+        except ValueError as exc:
+            errors.append(f"Invalid interface metadata: {exc}")
+    for document in root.rglob("*.md"):
         if any(part in {".git", "__pycache__", ".venv"} for part in document.parts):
             continue
         text = document.read_text(encoding="utf-8")
@@ -66,19 +92,22 @@ def check() -> list[str]:
                 continue
             target = unquote(destination.split("#", 1)[0])
             if target and not (document.parent / target).exists():
-                errors.append(f"Broken local link in {document.relative_to(ROOT)}: {destination}")
-    example = SKILL / "assets" / "report.example.json"
+                errors.append(f"Broken local link in {document.relative_to(root)}: {destination}")
+    for source in root.rglob("*.py"):
+        if any(part in {".git", "__pycache__", ".venv"} for part in source.parts):
+            continue
+        try:
+            compile(source.read_text(encoding="utf-8"), str(source), "exec")
+        except (SyntaxError, UnicodeError) as exc:
+            errors.append(f"Invalid Python source in {source.relative_to(root)}: {exc}")
+    example = skill / "assets" / "report.example.json"
     if example.is_file():
-        import importlib.util
-        helper = SKILL / "scripts" / "evidence.py"
+        helper = skill / "scripts" / "evidence.py"
         if helper.is_file():
-            spec = importlib.util.spec_from_file_location("intentweft_evidence", helper)
-            assert spec is not None and spec.loader is not None
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
             try:
-                module.validate_report(json.loads(example.read_text(encoding="utf-8")), ROOT)
-            except (ValueError, OSError) as exc:
+                module = load_module(helper, "intentweft_evidence_check")
+                module.validate_report(module.load_report(example), root)
+            except (ValueError, OSError, SyntaxError) as exc:
                 errors.append(f"Invalid example report: {exc}")
     return errors
 

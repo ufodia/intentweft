@@ -10,13 +10,100 @@ import argparse
 from datetime import date, datetime
 import hashlib
 import json
+import os
 from pathlib import Path, PureWindowsPath
 import re
+import stat
 import sys
+import tempfile
 
 
 class EvidenceError(ValueError):
     """A user-correctable evidence or report error."""
+
+
+def is_link(path: Path) -> bool:
+    """Recognize Windows reparse points even before Path.is_junction exists."""
+    if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+        return True
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
+        return False
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _invalid_constant(value: str) -> None:
+    raise EvidenceError(f"nonstandard JSON constant: {value}")
+
+
+def load_report(path: Path) -> object:
+    """Read strict JSON, rejecting ambiguous keys and nonstandard constants."""
+    with path.open(encoding="utf-8-sig") as handle:
+        return json.load(handle, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+
+
+def _validate_output(output: Path) -> None:
+    # Check the original path before resolving away any link components.
+    absolute = output.absolute()
+    for candidate in (*reversed(absolute.parents), absolute):
+        if is_link(candidate):
+            raise EvidenceError("snapshot output paths must not contain symlinks or reparse points")
+    if PureWindowsPath(str(output)).is_reserved():
+        raise EvidenceError("snapshot output must not name a reserved Windows device")
+    if output.exists() and not stat.S_ISREG(output.stat().st_mode):
+        raise EvidenceError("snapshot output must be a regular file")
+
+
+def _write_text(handle, content: str) -> None:
+    handle.write(content)
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def write_snapshot(output: Path, result: dict, *, force: bool) -> None:
+    """Preserve existing output on failure and prevent unrequested overwrites."""
+    content = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+    _validate_output(output)
+    if force:
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", newline="\n", dir=output.parent,
+                prefix=f".{output.name}.", suffix=".tmp", delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                _write_text(handle, content)
+            _validate_output(output)
+            os.replace(temporary, output)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+    else:
+        created_stat = None
+        try:
+            with output.open("x", encoding="utf-8", newline="\n") as handle:
+                created_stat = os.fstat(handle.fileno())
+                _write_text(handle, content)
+        except BaseException:
+            # Remove only this operation's partial new file, never a replacement.
+            if created_stat is not None and not is_link(output):
+                try:
+                    current_stat = output.stat()
+                    if (current_stat.st_dev, current_stat.st_ino) == (created_stat.st_dev, created_stat.st_ino):
+                        output.unlink()
+                except FileNotFoundError:
+                    pass
+            raise
 
 
 def _text(value: object, where: str) -> str:
@@ -72,7 +159,7 @@ def project_file(root: Path, locator: str) -> Path:
     target = base
     for part in parts:
         target = target / part
-        if target.is_symlink() or (hasattr(target, "is_junction") and target.is_junction()):
+        if is_link(target):
             raise EvidenceError(f"symlink or junction file locators are unsupported: {locator}")
     resolved = target.resolve(strict=True)
     if not resolved.is_relative_to(base):
@@ -175,7 +262,11 @@ def validate_report(raw: object, root: Path) -> dict:
         _refs(finding, "requirement_ids", requirements, finding_id)
         _choice(finding.get("severity"), {"critical", "high", "medium", "low"}, f"{finding_id}.severity")
         _choice(finding.get("confidence"), {"confirmed", "inferred", "unknown"}, f"{finding_id}.confidence")
-        _choice(finding.get("status"), {"open", "resolved", "accepted"}, f"{finding_id}.status")
+        status = _choice(finding.get("status"), {"open", "resolved", "accepted"}, f"{finding_id}.status")
+        if status == "accepted" or "acceptance_source_ids" in finding:
+            accepted_by = _refs(finding, "acceptance_source_ids", sources, finding_id)
+            if any(sources[source_id]["kind"] == "execution" for source_id in accepted_by):
+                raise EvidenceError(f"{finding_id}.acceptance_source_ids: execution evidence cannot authorize acceptance")
     for unknown_id, unknown in unknowns.items():
         _text(unknown.get("question"), f"{unknown_id}.question")
         _text(unknown.get("next_step"), f"{unknown_id}.next_step")
@@ -185,13 +276,18 @@ def validate_report(raw: object, root: Path) -> dict:
         _text(check.get("description"), f"{check_id}.description")
         _text(check.get("detail"), f"{check_id}.detail")
         status = _choice(check.get("status"), {"passed", "failed", "not-run"}, f"{check_id}.status")
+        if type(check.get("required", True)) is not bool:
+            raise EvidenceError(f"{check_id}.required: expected a boolean")
         _refs(check, "source_ids", sources, check_id, nonempty=status != "not-run")
 
     known_failure = (any(r["status"] == "unmet" for r in requirements.values())
                      or any(c["status"] == "failed" for c in checks.values())
-                     or any(f["status"] == "open" and f["severity"] in {"critical", "high"} for f in findings.values()))
+                     or any(f["status"] == "open" and f["severity"] in {"critical", "high"}
+                            and f["confidence"] != "unknown" for f in findings.values()))
     missing_evidence = (any(r["status"] == "unknown" for r in requirements.values())
                         or any(u["blocking"] for u in unknowns.values())
+                        or any(c["status"] == "not-run" and c.get("required", True) for c in checks.values())
+                        or any(f["status"] == "open" and f["confidence"] == "unknown" for f in findings.values())
                         or not any(c["status"] in {"passed", "failed"} for c in checks.values()))
     expected = "needs-action" if known_failure else "insufficient-evidence" if missing_evidence else "ready"
     if verdict != expected:
@@ -215,21 +311,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "snapshot":
             result = capture(args.root, args.paths)
-            if args.out.is_symlink() or (hasattr(args.out, "is_junction") and args.out.is_junction()):
-                raise EvidenceError("snapshot output must not be a symlink or junction")
+            _validate_output(args.out)
             # Never truncate an evidence input, even with --force.
             inputs = {project_file(args.root, locator) for locator in args.paths}
             if (args.out.resolve() in inputs
                     or (args.out.exists() and any(args.out.samefile(path) for path in inputs))):
                 raise EvidenceError("snapshot output must differ from its evidence inputs")
-            mode = "w" if args.force else "x"
-            with args.out.open(mode, encoding="utf-8", newline="\n") as handle:
-                json.dump(result, handle, indent=2, ensure_ascii=False)
-                handle.write("\n")
+            write_snapshot(args.out, result, force=args.force)
             print(f"Captured {len(result['sources'])} file fingerprint(s): {args.out}")
         else:
-            with args.report.open(encoding="utf-8-sig") as handle:
-                summary = validate_report(json.load(handle), args.root)
+            summary = validate_report(load_report(args.report), args.root)
             print(json.dumps(summary, sort_keys=True))
             print("Structure and file freshness checked; semantic truth and completeness were not checked.")
         return 0
