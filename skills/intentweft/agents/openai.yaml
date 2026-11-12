@@ -1,0 +1,4 @@
+interface:
+  display_name: "IntentWeft"
+  short_description: "Trace project intent to evidence and actionable fixes"
+  default_prompt: "Use $intentweft to review this change against project intent, constraints, and evidence."

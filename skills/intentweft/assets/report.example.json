@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "review": {
+    "mode": "review",
+    "scope": "Synthetic example: retention statement only; no implementation inspected",
+    "verdict": "insufficient-evidence"
+  },
+  "sources": [
+    {"id": "S1", "kind": "statement", "locator": "Synthetic product brief: retain activity for 30 days", "observed_at": "2026-11-13"}
+  ],
+  "requirements": [
+    {"id": "R1", "text": "Delete activity older than 30 days", "source_ids": ["S1"], "status": "unknown"}
+  ],
+  "findings": [],
+  "unknowns": [
+    {"id": "U1", "question": "Is a deletion job deployed and covering backups as required?", "blocking": true, "next_step": "Inspect the retention design and the deployed job evidence"}
+  ],
+  "checks": [
+    {"id": "C1", "description": "Inspect retention implementation", "status": "not-run", "source_ids": [], "detail": "No implementation or deployment evidence was supplied"}
+  ],
+  "next_actions": ["Obtain the retention implementation and relevant deployment evidence"]
+}
