@@ -252,7 +252,7 @@ class EvidenceTests(unittest.TestCase):
         source = {"id": "S2", "kind": "statement", "locator": "Synthetic observation"}
         self.report["sources"].append(source)
         for value in (
-            "2024-02-29", "2026-11-13", "2026-11-13T01:02:03Z",
+            "2024-02-29", "2026-11-13", "2026-11-13T01:02:03Z", "2026-11-13T23:59:59Z",
             "2026-11-13T01:02:03.1+05:30", "2026-11-13T01:02:03.123456-04:00",
             "2026-11-13T01:02:03.12Z", "2026-11-13T01:02:03.123Z",
             "2026-11-13T01:02:03.1234Z", "2026-11-13T01:02:03.12345Z",
@@ -266,7 +266,7 @@ class EvidenceTests(unittest.TestCase):
             "2026-11-13T01:02:03.1234567Z", "2026-11-13T01:02:03,5Z",
             "2026-11-13T01:02:03+0530", "2026-11-13T01:02:03+00:00:30",
             "2026-11-13T01:02:03+00:60", "2026-11-13T01:02:03+24:00",
-            "2026-11-13T24:00:00Z", "2026-11-13T01:02:60Z", "2026-02-29",
+            "2026-11-13T24:00:00Z", "2026-11-13T01:60:00Z", "2026-11-13T01:02:60Z", "2026-02-29",
         ):
             with self.subTest(value=value), self.assertRaisesRegex(evidence.EvidenceError, "observed_at"):
                 source["observed_at"] = value

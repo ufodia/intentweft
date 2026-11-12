@@ -25,6 +25,8 @@ Use source kinds `file`, `statement`, `external`, and `execution`. For `file`, p
 
 For other source kinds, provide a nonempty locator and `observed_at` as either `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS` followed by an optional fractional second (`.` plus one to six digits) and a required timezone (`Z` or an offset of `+HH:MM` / `-HH:MM`). Examples are `2026-11-13T09:30:00Z` and `2026-11-13T09:30:00.123456+02:00`. Compact dates, week dates, and timestamps without a timezone are rejected. For executions, the locator identifies the command or retained log; describe its actual result in the check detail. Do not embed credentials or private transcript excerpts.
 
+Clock hours must be `00` through `23`; minutes and seconds must be `00` through `59`. The helper rejects `24:00:00` and leap-second notation consistently across supported Python versions. Offset hours and minutes use the same `00` through `23` and `00` through `59` bounds.
+
 Use requirement status `met`, `unmet`, or `unknown`; finding status `open`, `resolved`, or `accepted`; confidence `confirmed`, `inferred`, or `unknown`; severity `critical`, `high`, `medium`, or `low`; check status `passed`, `failed`, or `not-run`.
 
 For an `accepted` finding, provide a nonempty `acceptance_source_ids` list identifying the specific decision accepting the risk. These references must resolve to sources of kind `file`, `statement`, or `external`; an execution result cannot establish acceptance. The helper validates the references and source kinds, not the decision's authenticity, scope, or authority. Cite the relevant decision anchor in the finding narrative. Risk acceptance does not change an unmet requirement to met.
