@@ -106,7 +106,7 @@ Scope: Location analytics change; static inspection only
 
 F1 — Precise coordinates leave the device
 Requirement: R1, product-brief.md, "Data promise"
-Evidence: analytics.ts, trackLocation(), outgoing latitude/longitude fields
+Evidence: analytics.ts, trackMapOpen(), outgoing latitude/longitude fields
 Trigger: A user grants location permission and opens the map
 Impact: The analytics path contradicts the documented storage promise
 Action: Remove precise coordinates from the event and review downstream fields

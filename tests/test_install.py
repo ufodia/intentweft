@@ -19,7 +19,9 @@ class InstallTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Windows temp paths may use short aliases. Match the installer's canonical paths
+        # so link mocks exercise the intended boundary instead of missing the target.
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / "source"
         self.source.mkdir()
         (self.source / "SKILL.md").write_text(
@@ -34,8 +36,8 @@ class InstallTests(unittest.TestCase):
     def symlink(self, link, target, directory=False):
         try:
             link.symlink_to(target, target_is_directory=directory)
-        except (OSError, NotImplementedError) as exc:
-            self.skipTest(f"Symbolic links are unavailable: {exc}")
+        except (OSError, NotImplementedError):
+            self.skipTest("Symbolic links are unavailable in this environment.")
 
     def test_both_copies_complete_skill(self):
         targets = installer.install(self.source, self.project, "both")
@@ -104,7 +106,7 @@ class InstallTests(unittest.TestCase):
         dangerous = self.project / ".agents"
         real_is_link = installer.is_link
         with patch.object(installer, "is_link", side_effect=lambda path: path == dangerous or real_is_link(path)):
-            with self.assertRaises(installer.InstallError):
+            with self.assertRaisesRegex(installer.InstallError, "Symbolic links are not allowed in destination paths"):
                 installer.install(self.source, self.project, "codex")
         self.assertEqual(list(self.project.iterdir()), [])
 
@@ -112,7 +114,7 @@ class InstallTests(unittest.TestCase):
         dangerous = self.source / "references" / "protocol.md"
         real_is_link = installer.is_link
         with patch.object(installer, "is_link", side_effect=lambda path: path == dangerous or real_is_link(path)):
-            with self.assertRaises(installer.InstallError):
+            with self.assertRaisesRegex(installer.InstallError, "Symbolic links are not allowed in the source"):
                 installer.install(self.source, self.project, "codex")
         self.assertEqual(list(self.project.iterdir()), [])
 
