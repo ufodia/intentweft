@@ -78,8 +78,6 @@ def _validate_output(output: Path) -> None:
     for candidate in (*reversed(absolute.parents), absolute):
         if is_link(candidate):
             raise EvidenceError("snapshot output paths must not contain symlinks or reparse points")
-    if PureWindowsPath(str(output)).is_reserved():
-        raise EvidenceError("snapshot output must not name a reserved Windows device")
     if output.exists() and not stat.S_ISREG(output.stat().st_mode):
         raise EvidenceError("snapshot output must be a regular file")
 

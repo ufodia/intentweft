@@ -149,7 +149,7 @@ python scripts/check_repository.py
 python -m unittest discover -s tests -v
 ```
 
-CI runs structural checks, helper tests, and installed-package integration checks on Windows, Linux, and macOS with Python 3.10 and 3.12. These checks validate packaging and code behavior; they do not measure model review quality. [Evaluation guidance](evals/README.md) explains how to run fresh agent sessions against the synthetic cases without leaking expected answers.
+CI runs structural checks, helper tests, and installed-package integration checks on Windows, Linux, and macOS with Python 3.10, 3.12, and 3.15. These checks validate packaging and code behavior; they do not measure model review quality. [Evaluation guidance](evals/README.md) explains how to run fresh agent sessions against the synthetic cases without leaking expected answers.
 
 See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the [MIT license](LICENSE).
 

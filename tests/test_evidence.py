@@ -371,6 +371,15 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, "reserved Windows device"):
             evidence.write_snapshot(self.root / "NUL", {}, force=True)
 
+    def test_output_validation_does_not_require_legacy_is_reserved(self):
+        output = self.root / "sources.json"
+        with patch.object(evidence.PureWindowsPath, "is_reserved", create=True,
+                          side_effect=AssertionError("Legacy pathlib API must not be called")):
+            evidence.write_snapshot(output, {"sources": []}, force=False)
+            with self.assertRaisesRegex(evidence.EvidenceError, "reserved Windows device"):
+                evidence.write_snapshot(self.root / "NUL", {}, force=True)
+        self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {"sources": []})
+
     def test_alternate_data_stream_output_rejected_without_orphan_files(self):
         before = set(self.root.iterdir())
         for locator in ("sources.json:stream", "reports:stream/sources.json"):
