@@ -1,155 +1,141 @@
-# IntentWeft
+<h1 align="center">IntentWeft</h1>
 
-**Keep project intent woven into every AI change.**
+<p align="center">
+  <strong>Keep project intent woven into every AI change.</strong><br>
+  A portable skill for Codex and Claude Code that connects project requirements to evidence, realistic failure scenarios, practical corrections, and honest verification.
+</p>
 
-A portable skill for **Codex and Claude Code** that connects project requirements to evidence, realistic failure scenarios, practical corrections, and honest verification results.
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#use-it">Use it</a> ·
+  <a href="docs/INSTALLATION.md">Installation guide</a>
+</p>
 
-An AI change can look correct while violating a promise buried in a product brief, a constraint in a decision record, or a behavior another component depends on. IntentWeft gives the agent a repeatable way to find those mismatches and explain what to do next.
+<p align="center">
+  <img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/ufodia/intentweft/validate.yml?branch=main&label=checks&style=flat-square">
+  <img alt="MIT license" src="https://img.shields.io/github/license/ufodia/intentweft?style=flat-square">
+  <img alt="Python 3.10 and newer" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Codex and Claude Code" src="https://img.shields.io/badge/Works%20with-Codex%20%2B%20Claude-6C63FF?style=flat-square">
+</p>
 
-> **Example:** A location app promises to keep precise coordinates on the device. A new analytics event sends them to a server. IntentWeft traces the promise to the payload, describes the permission-granted scenario, proposes a correction, and specifies how to verify the outgoing request.
+<p align="center">
+  <img src="docs/assets/intentweft-hero.svg" alt="An abstract woven network of luminous threads, representing project intent connected to evidence." width="100%">
+</p>
 
-The name combines **intent** with **weft**, the thread that binds a woven structure together.
+> An AI change can look right while breaking a promise in a product brief, a decision record, or a neighboring component. IntentWeft helps the agent find that mismatch and show the evidence, trigger, consequence, correction, and check.
 
-## What you get
+For example, a location app promises to keep precise coordinates on-device, but a new analytics event sends them to a server. IntentWeft traces the promise to the outgoing payload, describes when the issue occurs, suggests a focused correction, and says how to verify the request.
 
-- A concise [portable skill](skills/intentweft/SKILL.md) with four modes: preflight, review, verify, and handoff.
-- A review method that distinguishes observed facts, inferences, requirements, and unknowns.
-- Source-linked findings with a trigger, impact, correction, and verification step.
-- A [human report template](skills/intentweft/assets/review-template.md) and an optional [structured report](skills/intentweft/assets/report.example.json).
-- A Python helper that fingerprints explicitly selected files and checks report structure, cross-references, verdict consistency, and file freshness.
-- A local installer for Codex, Claude Code, or both. No API key, account, server, or third-party Python package is required by the bundled tools.
-- Synthetic examples, evaluation fixtures, automated helper tests, and a CI workflow.
-
-## Install
-
-Clone the repository and use Python 3.10 or later:
-
-```bash
-git clone https://github.com/ufodia/intentweft.git
-cd intentweft
-```
-
-Install into a project for both agents:
-
-```bash
-python scripts/install.py --agent both --scope project --project /absolute/path/to/your-project --dry-run
-python scripts/install.py --agent both --scope project --project /absolute/path/to/your-project
-```
-
-On Windows, use a quoted Windows path such as `"C:\Projects\my-app"`. Use `python3` instead of `python` if that is your Python command.
-
-To install for only one agent, use `--agent codex` or `--agent claude`. For your user account across projects:
-
-```bash
-python scripts/install.py --agent both --scope user --dry-run
-python scripts/install.py --agent both --scope user
-```
-
-The installer copies the same skill source to these supported locations, excluding generated `__pycache__` directories and `*.pyc` / `*.pyo` files:
-
-| Agent | Project installation | User installation |
-| --- | --- | --- |
-| Codex | `<project>/.agents/skills/intentweft/` | `~/.agents/skills/intentweft/` |
-| Claude Code | `<project>/.claude/skills/intentweft/` | `~/.claude/skills/intentweft/` |
-
-Existing skill folders are protected. The installer refuses to overwrite them. See [installation and updates](docs/INSTALLATION.md) for manual copying, removal, and compatibility notes.
-
-## Use it
-
-In Codex:
-
-```text
-Use $intentweft to review this branch against the product requirements.
-Find contradictions, trace each material finding to evidence, and give
-me the smallest practical fixes. Keep the review limited to this change.
-```
-
-In Claude Code:
-
-```text
-/intentweft Review this branch against the product requirements.
-Trace material findings to evidence and give me the smallest practical fixes.
-```
-
-You can also request a mode explicitly:
-
-| Situation | Example request |
-| --- | --- |
-| Before implementation | "Preflight this account-deletion plan against our retention promises and current storage design." |
-| Conflicting instructions | "Resolve the conflicts between this specification, the latest decision, and the implementation. Show unresolved ambiguity." |
-| After a fix | "Verify whether F2 is resolved. Reinspect changed sources and report which checks actually ran." |
-| Switching agents | "Prepare an IntentWeft handoff with the goal, current revision, evidence anchors, active decisions, unknowns, and next step." |
-| Evidence-heavy documents | "Review this summary for claims that the supplied documents do not support." |
-
-For a small task the skill returns a short inline review. Durable files are useful for larger changes and handoffs; it does not create a project bureaucracy for every edit.
+The name joins **intent** with **weft**: the thread that runs through a woven fabric.
 
 ## How it works
 
-1. Establish the intended outcome, scope, current revision, and authorized actions.
-2. Read relevant requirements and implementation evidence; identify stale or conflicting sources.
-3. Turn the outcome into observable acceptance criteria.
-4. Trace realistic failure scenarios and check evidence that could disprove a suspected problem.
-5. Propose or implement authorized corrections, then record actual verification.
-6. Deliver a bounded verdict, remaining unknowns, and executable next actions.
+A useful review connects the original goal to evidence and to a decision someone can act on. IntentWeft keeps each step visible:
 
-Every material finding follows this connection:
+<p align="center">
+  <img src="docs/assets/intentweft-flow.svg" alt="Five review steps: define intent, trace evidence, test failure scenarios, take practical action, and report verification." width="100%">
+</p>
 
-**Requirement → evidence → trigger → consequence → correction → verification.**
+**Requirement → evidence → trigger → consequence → correction → verification**
 
-The useful combination is intent preservation, evidence provenance, contradiction handling, and verification honesty. IntentWeft is a workflow skill, with small deterministic helpers for bookkeeping. Model reasoning remains responsible for interpreting the project.
+## What you get
 
-## What a result looks like
+- **Four focused modes:** preflight, review, verify, and handoff.
+- **Source-linked findings:** requirements, observed facts, inferences, and unknowns stay distinct.
+- **Practical next steps:** each material finding names its trigger, impact, correction, and verification.
+- **Honest results:** the report says what was inspected, which checks actually ran, and what remains unknown.
+- **Optional report helpers:** a Markdown template, a structured JSON format, and a Python helper for file fingerprints and report consistency.
+- **Portable packaging:** one skill source and a local installer for Codex, Claude Code, or both.
 
-```text
-Verdict: Needs action
-Scope: Location analytics change; static inspection only
+The bundled installer and helper scripts need no API key, server, or third-party Python package.
 
-F1 — Analytics payload includes precise coordinates
-Requirement: R1, product-brief.md, "Data promise"
-Evidence: analytics.ts, trackMapOpen(), outgoing latitude/longitude fields
-Trigger: trackMapOpen() is called with a device position
-Impact: The analytics path contradicts the documented storage promise
-Action: Remove precise coordinates from the event and review downstream fields
-Verification: Inspect a captured outgoing event after the fix
-Status: Not run; static evidence establishes the payload, not production traffic
-```
+## Quick start
 
-Read the complete [worked example](examples/location-privacy/REVIEW.md) or try the [evaluation fixtures](evals/README.md).
+Clone the repository and install IntentWeft into a project for both agents:
+
+~~~bash
+git clone https://github.com/ufodia/intentweft.git
+cd intentweft
+python scripts/install.py --agent both --scope project --project "/absolute/path/to/your-project" --dry-run
+python scripts/install.py --agent both --scope project --project "/absolute/path/to/your-project"
+~~~
+
+Python 3.10 or later is required for the installer and helper scripts. The skill can also be installed manually by copying the complete `skills/intentweft/` folder. The installer checks all destinations first and refuses to overwrite an existing skill.
+
+To install for one agent, pass `--agent codex` or `--agent claude`. To install for your user account across projects:
+
+~~~bash
+python scripts/install.py --agent both --scope user
+~~~
+
+On Windows, quote project paths that contain spaces. See the [installation guide](docs/INSTALLATION.md) for supported locations, manual installation, updates, and compatibility notes.
+
+## Use it
+
+Invoke **`$intentweft`** in Codex or **`/intentweft`** in Claude Code, then describe the change and the project intent you want checked. For example:
+
+~~~text
+Review this change against the project requirements.
+Trace each material finding to source evidence, give me the smallest practical fix,
+and report only the checks that actually ran. Keep the review within this change.
+~~~
+
+Choose a mode when it helps:
+
+| Mode | Use it for |
+| --- | --- |
+| **Preflight** | Check a proposed plan against requirements and likely failure paths before implementation. |
+| **Review** | Compare code, documents, or a change set with the intended outcome. |
+| **Verify** | Revisit a finding after a fix and collect fresh evidence for the affected behavior. |
+| **Handoff** | Give another agent a source-linked state it can reconstruct. |
+
+You can also ask it to resolve conflicting instructions, review whether supplied documents support a claim, or prepare a release decision. Small tasks can stay as a short inline review; a durable report is optional.
+
+## What a finding looks like
+
+~~~text
+F1 — Analytics event includes precise coordinates
+Requirement — product-brief.md, “Data promise”
+Evidence — analytics.ts, outgoing latitude/longitude fields
+Trigger — the event is sent with a device position
+Impact — the payload conflicts with the documented storage promise
+Correction — remove precise coordinates and inspect related event fields
+Verification — inspect a captured outgoing event after the fix
+Status — not run; static inspection does not establish production traffic
+~~~
+
+Read the complete [worked example](examples/location-privacy/REVIEW.md) or explore the [synthetic evaluation cases](evals/README.md).
 
 ## Optional evidence helper
 
-Fingerprint selected files before writing a durable JSON report:
+For a durable JSON report, fingerprint only the files you selected:
 
-```bash
+~~~bash
 python skills/intentweft/scripts/evidence.py snapshot --root /path/to/project --out sources.json product-brief.md src/analytics.ts
-```
-
-Copy the generated source entries into your report and retain its other required fields. Then check it:
-
-```bash
 python skills/intentweft/scripts/evidence.py check report.json --root /path/to/project
-```
+~~~
 
-File locators such as `src/analytics.ts` are relative to `--root` and use `/` separators on every operating system. Quote locators containing spaces. The `check` command exits `0` for a valid, current report even when its verdict is `needs-action` or `insufficient-evidence`; inspect the reported verdict separately. Exit `1` indicates an invalid or stale report or an I/O failure, and `2` indicates invalid command arguments.
+The helper reads the named files without network requests and stores paths and hashes, not file contents. It can detect listed files that have changed and check report structure and cross-references. It does not prove that a claim is true, find unlisted changes, run project tests, or certify correctness. See the [report format](skills/intentweft/references/report-format.md).
 
-The helper reads only named files and performs no network requests. It stores paths and hashes, not file contents. A changed file hash makes the report stale. It does not detect unlisted changes, authenticate evidence, evaluate legal compliance, run project tests, or prove semantic correctness. See the [report contract](skills/intentweft/references/report-format.md).
+## Scope and limits
 
-## Boundaries
+IntentWeft follows the host's permissions, project instructions, and the user's requested scope. A review request does not authorize deployment or publication. It does not guarantee that every problem will be found or certify security, legal outcomes, or correctness.
 
-IntentWeft follows the host's permissions and project instructions. A review request does not authorize deployment, publication, or changes to live systems. The skill works with the files and tools its host makes available; it does not share hidden memory between Codex and Claude.
+**“Ready” means ready within the stated scope and evidence.** Missing evidence stays visible, verification is limited to checks that actually ran, and accepted risks require an explicit decision.
 
-`Ready` always means **ready within the stated scope and evidence**. Missing evidence stays visible. Accepted risks remain disclosed. The skill cannot guarantee detection of every problem or certify security, legal outcomes, or correctness.
-
-The portable source uses common `SKILL.md` frontmatter and no required vendor-specific tool calls. `agents/openai.yaml` provides optional Codex interface metadata. This repository documents local Codex and Claude Code installation; account-level ChatGPT, Claude.ai, and cloud-session packaging can have different installation requirements.
+The core skill uses common Agent Skills frontmatter and relative resource links. This repository documents local installation for Codex and Claude Code; ChatGPT account-level skills, Claude.ai, and remote sessions may need different packaging.
 
 ## Development and evaluation
 
-```bash
+Run the repository checks locally:
+
+~~~bash
 python scripts/check_repository.py
 python -m unittest discover -s tests -v
-```
+~~~
 
-CI runs structural checks, helper tests, and installed-package integration checks on Windows, Linux, and macOS with Python 3.10, 3.12, and 3.15. These checks validate packaging and code behavior; they do not measure model review quality. [Evaluation guidance](evals/README.md) explains how to run fresh agent sessions against the synthetic cases without leaking expected answers.
+GitHub Actions runs these checks on Ubuntu, Windows, and macOS with Python 3.10, 3.12, and 3.15. They check packaging and helper behavior, not model review quality. The synthetic evaluation procedure and its limits are in [evals/README.md](evals/README.md); the recorded scope is in [eval results](evals/RESULTS.md).
 
 See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the [MIT license](LICENSE).
 
@@ -158,5 +144,3 @@ See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the 
 - [OpenAI: Build skills](https://learn.chatgpt.com/docs/build-skills)
 - [Claude Code: Extend Claude with skills](https://code.claude.com/docs/en/skills)
 - [Agent Skills specification](https://agentskills.io/specification)
-
-Installation locations and formats were checked on November 13, 2026. Host versions and organization policies can affect availability.

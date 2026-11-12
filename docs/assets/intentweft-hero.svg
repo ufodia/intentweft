@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 380" role="img" aria-labelledby="title desc">
+  <title id="title">IntentWeft — project intent, woven into every change</title>
+  <desc id="desc">A luminous woven mark and a flowing mesh of teal, violet, and amber threads on a midnight background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A1020"/>
+      <stop offset=".52" stop-color="#111A30"/>
+      <stop offset="1" stop-color="#0B1222"/>
+    </linearGradient>
+    <radialGradient id="glowA">
+      <stop stop-color="#42D9C1" stop-opacity=".23"/>
+      <stop offset="1" stop-color="#42D9C1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB">
+      <stop stop-color="#8878FF" stop-opacity=".27"/>
+      <stop offset="1" stop-color="#8878FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="thread1" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#5DE0C5"/>
+      <stop offset=".52" stop-color="#83B9F4"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="thread2" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#8878FF"/>
+      <stop offset=".58" stop-color="#55D6C1"/>
+      <stop offset="1" stop-color="#FFD08A"/>
+    </linearGradient>
+    <linearGradient id="thread3" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#7B71E8" stop-opacity=".1"/>
+      <stop offset=".5" stop-color="#FFC987"/>
+      <stop offset="1" stop-color="#FFC987" stop-opacity=".15"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#AAB9D5" stroke-opacity=".045" stroke-width="1"/>
+      <circle cx="0" cy="0" r="1.2" fill="#AAB9D5" fill-opacity=".11"/>
+    </pattern>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <clipPath id="orb"><circle cx="1080" cy="190" r="242"/></clipPath>
+  </defs>
+  <rect width="1440" height="380" rx="28" fill="url(#bg)"/>
+  <rect width="1440" height="380" rx="28" fill="url(#grid)"/>
+  <ellipse cx="1100" cy="190" rx="430" ry="310" fill="url(#glowA)"/>
+  <ellipse cx="740" cy="190" rx="360" ry="260" fill="url(#glowB)"/>
+
+  <g opacity=".82" fill="none" stroke-linecap="round">
+    <path d="M330 188C480 55 620 55 758 188S1030 321 1170 188 1345 55 1470 150" stroke="url(#thread1)" stroke-width="22" opacity=".13" filter="url(#blur)"/>
+    <path d="M330 188C480 55 620 55 758 188S1030 321 1170 188 1345 55 1470 150" stroke="url(#thread1)" stroke-width="2.4"/>
+    <path d="M330 188C475 320 624 320 758 188S1032 55 1170 188 1345 320 1470 220" stroke="url(#thread2)" stroke-width="19" opacity=".12" filter="url(#blur)"/>
+    <path d="M330 188C475 320 624 320 758 188S1032 55 1170 188 1345 320 1470 220" stroke="url(#thread2)" stroke-width="2.1"/>
+    <path d="M360 100C520 100 570 280 730 280S935 100 1098 100 1305 280 1450 280" stroke="url(#thread3)" stroke-width="1.6" opacity=".75"/>
+    <path d="M360 276C520 276 570 98 730 98S935 276 1098 276 1305 98 1450 98" stroke="url(#thread1)" stroke-width="1.4" opacity=".66"/>
+  </g>
+
+  <g clip-path="url(#orb)" fill="none" stroke-linecap="round">
+    <circle cx="1080" cy="190" r="240" stroke="#AAB9D5" stroke-opacity=".17" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="202" ry="240" stroke="#8BB6E8" stroke-opacity=".25" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="126" ry="240" stroke="#8BB6E8" stroke-opacity=".23" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="52" ry="240" stroke="#6BDCC8" stroke-opacity=".22" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="240" ry="195" stroke="#A78BFA" stroke-opacity=".28" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="240" ry="126" stroke="#6BDCC8" stroke-opacity=".24" stroke-width="1.2"/>
+    <ellipse cx="1080" cy="190" rx="240" ry="58" stroke="#FFC987" stroke-opacity=".28" stroke-width="1.2"/>
+    <path d="M840 190H1320M1080 -50V430" stroke="#D6E0F2" stroke-opacity=".16" stroke-width="1"/>
+  </g>
+  <circle cx="1080" cy="190" r="242" fill="none" stroke="#C6D5F0" stroke-opacity=".25" stroke-width="1.2"/>
+
+  <g transform="translate(92 78)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="0" width="206" height="206" rx="34" fill="#131D34" fill-opacity=".72" stroke="#B7C8E5" stroke-opacity=".2"/>
+    <path d="M45 104C45 70 75 45 104 45S163 70 163 104 134 163 104 163 45 137 45 104Z" stroke="url(#thread1)" stroke-width="6"/>
+    <path d="M104 45C138 45 163 75 163 104S138 163 104 163 45 134 45 104 75 45 104 45Z" stroke="url(#thread2)" stroke-width="6" stroke-dasharray="88 15 47 18"/>
+    <path d="M65 104H143M104 65V143" stroke="#E7EEFA" stroke-opacity=".24" stroke-width="1.4"/>
+    <circle cx="104" cy="45" r="4.5" fill="#6BE0CA" stroke="none"/>
+    <circle cx="163" cy="104" r="4.5" fill="#A78BFA" stroke="none"/>
+    <circle cx="104" cy="163" r="4.5" fill="#FFC987" stroke="none"/>
+    <circle cx="45" cy="104" r="4.5" fill="#6BE0CA" stroke="none"/>
+  </g>
+
+  <path d="M92 318H298" stroke="#8797B5" stroke-opacity=".36" stroke-width="1"/>
+  <circle cx="300" cy="318" r="3" fill="#62DCC6"/>
+  <circle cx="330" cy="318" r="3" fill="#A78BFA" opacity=".8"/>
+  <circle cx="360" cy="318" r="3" fill="#FFC987" opacity=".8"/>
+</svg>
