@@ -144,3 +144,11 @@ See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the 
 - [OpenAI: Build skills](https://learn.chatgpt.com/docs/build-skills)
 - [Claude Code: Extend Claude with skills](https://code.claude.com/docs/en/skills)
 - [Agent Skills specification](https://agentskills.io/specification)
+
+## Support this project
+
+<p align="center">
+  <a href="https://buymeacoffee.com/ufodia">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60">
+  </a>
+</p>
