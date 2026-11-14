@@ -139,6 +139,10 @@ GitHub Actions runs these checks on Ubuntu, Windows, and macOS with Python 3.10,
 
 See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and the [MIT license](LICENSE).
 
+## Related project
+
+[**Venturemorph**](https://github.com/ufodia/venturemorph) helps founders and product teams revisit product direction, growth experiments, and brand decisions as evidence changes.
+
 ## Official format references
 
 - [OpenAI: Build skills](https://learn.chatgpt.com/docs/build-skills)
