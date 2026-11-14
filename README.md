@@ -71,6 +71,8 @@ python scripts/install.py --agent both --scope user
 
 On Windows, quote project paths that contain spaces. See the [installation guide](docs/INSTALLATION.md) for supported locations, manual installation, updates, and compatibility notes.
 
+**Using ChatGPT?** Eligible accounts may upload the complete skill package through the Skills interface. See [ChatGPT installation and limits](docs/INSTALLATION.md#chatgpt). The upload and runtime have not been tested by this repository.
+
 ## Use it
 
 Invoke **`$intentweft`** in Codex or **`/intentweft`** in Claude Code, then describe the change and the project intent you want checked. For example:
