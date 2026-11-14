@@ -37,7 +37,15 @@ To remove IntentWeft, delete only the installed `intentweft` folder from the rel
 
 ## Other hosts
 
-The core instructions use only `name` and `description` frontmatter and relative resource links. Other Agent Skills compatible hosts may be able to use the same source. Such hosts are not evaluated by this repository. Claude.ai, ChatGPT account-level skills, and remote sessions may require upload or plugin packaging rather than local folders; follow their own current instructions.
+The core instructions use only `name` and `description` frontmatter and relative resource links. Other Agent Skills compatible hosts may be able to use the same source. These hosts are not evaluated by this repository.
+
+### ChatGPT
+
+On an eligible account or workspace, ChatGPT offers **Skills → Create → Upload from your computer**. Review and upload the complete `skills/intentweft/` skill package, including its supporting directories, using the format the upload flow requests. ChatGPT scans uploaded skills before making them available; access and upload permissions depend on the account and workspace. See [Skills in ChatGPT](https://help.openai.com/en/articles/20001066-skills-in-chatgpt) for the current workflow.
+
+Local Codex installation does not automatically install an account-level ChatGPT skill. ChatGPT's ability to access local files or run the optional Python helper depends on the selected environment and its permissions. This repository has not tested the ChatGPT upload or runtime, so verify availability and the workflow in your own environment.
+
+Claude.ai and remote sessions may also require account-level installation or plugin packaging rather than local folders; follow their current instructions.
 
 ## References
 
